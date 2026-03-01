@@ -14,6 +14,7 @@ type Config struct {
 	FetchIntervalInMinutes int64
 	DBPath                 string
 	POBRoot                string
+	LuajitPath             string
 }
 
 var Envs = initConfig()
@@ -28,6 +29,7 @@ func initConfig() Config {
 		FetchIntervalInMinutes: getEnvAsInt("FETCH_INTERVAL_IN_MINUTES", 30),
 		DBPath:                 getEnv("DB_PATH", "./data.db"),
 		POBRoot:                getEnv("POB_ROOT", "/home/alexander/dev/goofing/PathOfBuilding"),
+		LuajitPath:             getEnv("LUAJIT_PATH", ""),
 	}
 }
 

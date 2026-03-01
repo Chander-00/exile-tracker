@@ -1,10 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +27,7 @@ type FetcherService struct {
 	poeClient *poeclient.POEClient
 	log       zerolog.Logger
 	ticker    *time.Ticker
-	done      chan bool
+	done      chan struct{}
 }
 
 func NewFetcherService(repo *repository.Repository, poeClient *poeclient.POEClient, interval time.Duration) *FetcherService {
@@ -34,7 +36,7 @@ func NewFetcherService(repo *repository.Repository, poeClient *poeclient.POEClie
 		poeClient: poeClient,
 		log:       utils.ChildLogger("fetcher"),
 		ticker:    time.NewTicker(interval),
-		done:      make(chan bool),
+		done:      make(chan struct{}, 1),
 	}
 }
 
@@ -42,7 +44,7 @@ func (fs *FetcherService) Start(ctx context.Context) {
 	fs.log.Info().Msg("Starting fetcher service")
 
 	// Run once first
-	go fs.fetchAllData()
+	go fs.fetchAllData(ctx)
 
 	go func() {
 		for {
@@ -51,9 +53,10 @@ func (fs *FetcherService) Start(ctx context.Context) {
 				fs.log.Info().Msg("Fetcher service stopped")
 				return
 			case <-fs.ticker.C:
-				fs.fetchAllData()
+				fs.fetchAllData(ctx)
 			case <-ctx.Done():
 				fs.log.Info().Msg("Context cancelled, stopping fetcher service")
+				return
 			}
 		}
 	}()
@@ -61,28 +64,34 @@ func (fs *FetcherService) Start(ctx context.Context) {
 
 func (fs *FetcherService) Stop() {
 	fs.ticker.Stop()
-	fs.done <- true
+	close(fs.done)
 }
 
-func (fs *FetcherService) fetchAllData() {
+func (fs *FetcherService) fetchAllData(ctx context.Context) {
 	fs.log.Info().Msg("Starting fetch cycle")
 
 	charactersToFetch, err := fs.repo.GetCharactersToFetch()
 	if err != nil {
-		fs.log.Error().Err(err).Msg("Faile to get characters to fetch from database")
+		fs.log.Error().Err(err).Msg("Failed to get characters to fetch from database")
 		return
 	}
 
 	fs.log.Info().Int("characters_to_fetch", len(charactersToFetch)).Msg("Found characters to process")
 
 	for _, ctf := range charactersToFetch {
-		fs.FetchCharacterData(ctf)
+		select {
+		case <-ctx.Done():
+			fs.log.Info().Msg("Context cancelled during fetch cycle, stopping")
+			return
+		default:
+		}
+		fs.FetchCharacterData(ctx, ctf)
 		time.Sleep(2 * time.Second)
 	}
 	fs.log.Info().Msg("Data fetch cycle completed")
 }
 
-func (fs *FetcherService) FetchCharacterData(ctf models.CharactersToFetch) {
+func (fs *FetcherService) FetchCharacterData(ctx context.Context, ctf models.CharactersToFetch) {
 	c, err := fs.repo.GetCharacterByID(ctf.CharacterId)
 	if err != nil {
 		fs.log.Error().Err(err).Str("character_id", ctf.CharacterId).Msg("Failed to fetch")
@@ -129,68 +138,62 @@ func (fs *FetcherService) FetchCharacterData(ctf models.CharactersToFetch) {
 		return
 	}
 
-	err = fs.CreateSnapshot(c.ID, itemsResponse, passivesResponse)
+	err = fs.CreateSnapshot(ctx, c.ID, itemsResponse, passivesResponse)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create snapshot")
 		return
 	}
 }
 
-func (fs *FetcherService) CreateSnapshot(characterId string, items models.ItemsResponse, passives models.PassiveSkillsResponse) error {
-	currentDir, err := os.Getwd()
+func (fs *FetcherService) CreateSnapshot(ctx context.Context, characterId string, items models.ItemsResponse, passives models.PassiveSkillsResponse) error {
+	dirPath, err := os.MkdirTemp("", "exile-"+characterId+"-*")
 	if err != nil {
-		return errors.Join(err, errors.New("failed to get current directory"))
+		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-
-	dirPath := filepath.Join(currentDir, characterId)
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return errors.Join(err, errors.New("failed to create character directory"))
-	}
+	defer os.RemoveAll(dirPath)
 
 	itemsPath := filepath.Join(dirPath, "items.json")
 	file, err := os.OpenFile(itemsPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		return errors.Join(err, errors.New("error trying to open items file"))
+		return fmt.Errorf("error trying to open items file: %w", err)
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	err = encoder.Encode(items)
 	if err != nil {
-		return errors.Join(err, errors.New("something went wrong while encoding json items"))
+		return fmt.Errorf("failed to encode json items: %w", err)
 	}
 
 	passivesPath := filepath.Join(dirPath, "passives.json")
 	passivesFile, err := os.OpenFile(passivesPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		return errors.Join(err, errors.New("error trying to open passives file"))
+		return fmt.Errorf("error trying to open passives file: %w", err)
 	}
 	defer passivesFile.Close()
 
 	encoder2 := json.NewEncoder(passivesFile)
 	err = encoder2.Encode(passives)
 	if err != nil {
-		return errors.Join(err, errors.New("something went wrong while encoding json passives"))
+		return fmt.Errorf("failed to encode json passives: %w", err)
 	}
 
-	result, err := fs.generatePoBBin(itemsPath, passivesPath)
+	result, err := fs.generatePoBBin(ctx, itemsPath, passivesPath)
 	if err != nil {
-		return errors.Join(err, errors.New("failed to execute PoB"))
+		return fmt.Errorf("failed to execute PoB: %w", err)
 	}
-
-	// Clean up after execution
-	os.RemoveAll(dirPath)
 
 	dbSnapshot, err := fs.repo.GetLatestSnapshotByCharacter(characterId)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			return errors.Join(err, errors.New("something went wrong while getting snapshots"))
+			return fmt.Errorf("failed to get latest snapshot: %w", err)
 		}
 		fs.log.Warn().Msg("No previous snapshots found.")
 	}
 
 	if result == dbSnapshot.ExportString {
-		return errors.New("no changes detected between latest and current snapshot")
+		fs.log.Info().Msg("No changes detected between latest and current snapshot")
+		return nil
 	}
 
 	err = fs.repo.CreatePOBSnapshot(repository.CreatePoBSnapshotParams{
@@ -198,39 +201,63 @@ func (fs *FetcherService) CreateSnapshot(characterId string, items models.ItemsR
 		ExportString: result,
 	})
 	if err != nil {
-		return errors.Join(err, errors.New("something went wrong while trying to store snapshot"))
+		return fmt.Errorf("failed to store snapshot: %w", err)
 	}
 
 	return nil
 }
 
-func (fs *FetcherService) generatePoBBin(itemsPath string, passivesPath string) (string, error) {
+func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, passivesPath string) (string, error) {
 	fs.log.Info().Msg("Executing Path of Building in headless mode")
 	pobRoot := config.Envs.POBRoot
 
 	srcDir := filepath.Join(pobRoot, "src")
-
 	runtimeLua := filepath.Join(pobRoot, "runtime", "lua")
 	runtime := filepath.Join(pobRoot, "runtime")
 
-	os.Setenv("LUA_PATH", runtimeLua+"/?.lua;"+runtimeLua+"/?/init.lua;;")
-	os.Setenv("LUA_CPATH", runtime+"/?.so;"+runtime+"/?.dll;;")
-
-	// Use absolute paths for JSON files to avoid any path resolution issues
-	cmd := exec.Command("/usr/bin/luajit", "HeadlessWrapper.lua", itemsPath, passivesPath)
-	cmd.Dir = srcDir // Set working directory for this command only
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Join(err, errors.New("the command execution failed"))
+	luajitPath := config.Envs.LuajitPath
+	if luajitPath == "" {
+		var err error
+		luajitPath, err = exec.LookPath("luajit")
+		if err != nil {
+			return "", fmt.Errorf("luajit not found in PATH (set LUAJIT_PATH to specify it manually): %w", err)
+		}
 	}
 
-	lines := strings.Split(string(output), "\n")
-	last := lines[len(lines)-2]
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-	uploadedBuild, err := buildsSitesClient.UploadBuild(last, buildsSitesClient.SitesUrl.PoeNinja)
+	cmd := exec.CommandContext(ctx, luajitPath, "HeadlessWrapper.lua", itemsPath, passivesPath)
+	cmd.Dir = srcDir
+	cmd.Env = append(os.Environ(),
+		"LUA_PATH="+runtimeLua+"/?.lua;"+runtimeLua+"/?/init.lua;;",
+		"LUA_CPATH="+runtime+"/?.so;"+runtime+"/?.dll;;",
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fs.log.Error().Str("stderr", stderr.String()).Msg("PoB execution timed out after 30s")
+			return "", fmt.Errorf("PoB execution timed out after 30s: %w", err)
+		}
+		return "", fmt.Errorf("PoB execution failed: %w\nstderr: %s", err, stderr.String())
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		return "", fmt.Errorf("PoB produced empty output")
+	}
+
+	// Take the last non-empty line as the build code
+	lines := strings.Split(output, "\n")
+	buildCode := strings.TrimSpace(lines[len(lines)-1])
+
+	uploadedBuild, err := buildsSitesClient.UploadBuild(buildCode, buildsSitesClient.SitesUrl.PoeNinja)
 	if err != nil {
-		return "", errors.Join(err, errors.New("failed when uploading build"))
+		return "", fmt.Errorf("failed when uploading build: %w", err)
 	}
 	fs.log.Debug().Msg(uploadedBuild)
 	return uploadedBuild, nil

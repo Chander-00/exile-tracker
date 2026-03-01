@@ -40,6 +40,9 @@ func (r *Repository) SearchCharactersInAccount(params SearchCharactersInAccountP
 		characters = append(characters, c)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return characters, nil
 }
 
@@ -73,6 +76,9 @@ func (r *Repository) GetCharactersByAccountId(accountId string) ([]models.Charac
 		characters = append(characters, char)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return characters, nil
 }
 
@@ -136,6 +142,9 @@ func (r *Repository) GetCharactersToFetch() ([]models.CharactersToFetch, error) 
 			return nil, err
 		}
 		cToFetch = append(cToFetch, char)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return cToFetch, nil
 }
@@ -218,6 +227,9 @@ func (r *Repository) GetAllCharacters() ([]models.Character, error) {
 		characters = append(characters, char)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return characters, nil
 }
 

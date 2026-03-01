@@ -25,6 +25,9 @@ func (r *Repository) GetAllAccounts() ([]models.Account, error) {
 		}
 		accounts = append(accounts, acc)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return accounts, nil
 }
 
@@ -114,6 +117,9 @@ func (r *Repository) SearchAccounts(searchTerm string) ([]models.Account, error)
 			return nil, err
 		}
 		accounts = append(accounts, acc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return accounts, nil
 }

@@ -68,6 +68,9 @@ func (r *Repository) GetSnapshotsByCharacterWithExtras(params GetSnapshotsByChar
 		swe = append(swe, s)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return swe, nil
 }
 

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
+
+var validate = validator.New()
 
 func WriteJSON(w http.ResponseWriter, status int, v interface{}) error {
 	w.Header().Add("Content-Type", "application/json")
@@ -18,7 +21,7 @@ func WriteJSON(w http.ResponseWriter, status int, v interface{}) error {
 
 func RespondWithError(w http.ResponseWriter, code int, err error) {
 	if code > 499 {
-		log.Println("Responded with 5XX error: ", err.Error())
+		BaseLogger.Error().Int("status", code).Err(err).Msg("Responded with 5XX error")
 	}
 
 	type errResponse struct {
@@ -44,7 +47,7 @@ func ParseJson(r *http.Request, payload any) error {
 		case errors.As(err, &syntaxErr):
 			return fmt.Errorf("malformed JSON at position %d", syntaxErr.Offset)
 		case errors.As(err, &unmarshalTypeErr):
-			log.Println("unmarshal type error", unmarshalTypeErr.Value)
+			BaseLogger.Warn().Str("value", unmarshalTypeErr.Value).Msg("unmarshal type error")
 			return fmt.Errorf("invalid value for field '%s', expected type '%s', received type '%s'",
 				unmarshalTypeErr.Field,
 				unmarshalTypeErr.Type,
@@ -60,6 +63,22 @@ func ParseJson(r *http.Request, payload any) error {
 		}
 	}
 
+	return nil
+}
+
+func ValidatePayload(payload any) error {
+	err := validate.Struct(payload)
+	if err != nil {
+		var validationErrs validator.ValidationErrors
+		if errors.As(err, &validationErrs) {
+			var msgs []string
+			for _, fe := range validationErrs {
+				msgs = append(msgs, fmt.Sprintf("field '%s' failed on '%s' validation", fe.Field(), fe.Tag()))
+			}
+			return fmt.Errorf("validation failed: %s", strings.Join(msgs, "; "))
+		}
+		return err
+	}
 	return nil
 }
 

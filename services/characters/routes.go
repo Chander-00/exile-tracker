@@ -58,7 +58,7 @@ func (h *Handler) handleGetCharacterByID(w http.ResponseWriter, r *http.Request)
 			})
 			return
 		}
-		utils.RespondWithError(w, http.StatusNotFound, err)
+		utils.RespondWithError(w, http.StatusInternalServerError, err)
 		return
 	}
 	utils.WriteJSON(w, http.StatusOK, character)
@@ -80,6 +80,10 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
+	if err := utils.ValidatePayload(&payload); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err)
+		return
+	}
 	err := h.repository.CreateCharacter(payload.AccountId, payload.CharacterName, payload.CurrentLeague)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err)
@@ -95,6 +99,10 @@ func (h *Handler) handleUpdateCharacter(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	var payload apimodels.UpdateCharacterInput
 	if err := utils.ParseJson(r, &payload); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := utils.ValidatePayload(&payload); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -146,6 +154,10 @@ func (h *Handler) handleAddCharactersToFetch(w http.ResponseWriter, r *http.Requ
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
+	if err := utils.ValidatePayload(&payload); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err)
+		return
+	}
 
 	err := h.repository.AddCharacterToFetch(repository.AddCharactersToFetchParams{
 		CharacterId: payload.CharacterId,
@@ -155,7 +167,7 @@ func (h *Handler) handleAddCharactersToFetch(w http.ResponseWriter, r *http.Requ
 		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("couldnt add character to fetch"))
 		return
 	}
-	utils.WriteJSON(w, http.StatusCreated, map[string]interface{}{
+	utils.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"Message": fmt.Sprintf("Character %s is now tracked", payload.CharacterId),
 	})
 }

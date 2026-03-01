@@ -3,8 +3,10 @@ package frontend
 import (
 	"database/sql"
 	"errors"
+	"io/fs"
 	"net/http"
 
+	"github.com/ByChanderZap/exile-tracker/cmd/web/static"
 	"github.com/ByChanderZap/exile-tracker/cmd/web/templates"
 	"github.com/ByChanderZap/exile-tracker/models"
 	"github.com/ByChanderZap/exile-tracker/repository"
@@ -26,9 +28,8 @@ func NewHandler(db *repository.Repository, logger zerolog.Logger) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router *chi.Mux) {
-	router.Use(utils.ZerologMiddleware(h.log))
-	fs := http.FileServer(http.Dir("cmd/web/static"))
-	router.Handle("/static/*", http.StripPrefix("/static/", fs))
+	staticFS, _ := fs.Sub(static.Files, ".")
+	router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
 	router.Get("/", h.handleHomePage)
 	router.Get("/search", h.handleSearchAccounts)
@@ -39,8 +40,6 @@ func (h *Handler) RegisterRoutes(router *chi.Mux) {
 }
 
 func (h *Handler) handleHomePage(w http.ResponseWriter, r *http.Request) {
-	// templ.Handler(templates.Main("alex"))
-
 	accounts, err := h.repository.GetAllAccounts()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Query to get accounts failed")
@@ -77,12 +76,12 @@ func (h *Handler) handleCharactersByAccount(w http.ResponseWriter, r *http.Reque
 
 	cs, err := h.repository.GetCharactersByAccountId(accId)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "No characters to show", http.StatusNotFound)
 			return
 		}
 		h.log.Error().Err(err).Msg("Query to get all characters by account id failed")
-		http.Error(w, "Failed to load characters", http.StatusBadRequest)
+		http.Error(w, "Failed to load characters", http.StatusInternalServerError)
 		return
 	}
 	templates.CharactersByAccountId(cs, accId, utils.StringValue).Render(r.Context(), w)
@@ -123,8 +122,10 @@ func (h *Handler) handleLoadedSnapshotsByCharacter(w http.ResponseWriter, r *htt
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "No snapshots found", http.StatusNotFound)
+			return
 		}
-		http.Error(w, "something went wrong", http.StatusBadRequest)
+		http.Error(w, "something went wrong", http.StatusInternalServerError)
+		return
 	}
 
 	templates.SnapshotsPage(snaps, utils.StringValue).Render(r.Context(), w)

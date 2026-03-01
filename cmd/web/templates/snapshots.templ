@@ -5,88 +5,41 @@ import "fmt"
 import "time"
 
 templ SnapshotsPage(swe []models.SnapshotWithExtras, stringValue func(*string) string) {
-	<!DOCTYPE html>
-	<html>
-		<head>
-			<link
-				href="https://cdn.jsdelivr.net/npm/daisyui@4.4.18/dist/full.min.css"
-			rel="stylesheet"
-				type="text/css"
-			/>
-			<script src="https://cdn.tailwindcss.com"></script>
-			<script src="/static/htmx.min.js"></script>
-			<link rel="icon" type="image/x-icon" href="/static/favicon.ico"/>
-		</head>
-		<body
-			class="min-h-screen w-full bg-[#101014] text-white"
-			style="
-        background-image:
-          repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 40px),
-          repeating-linear-gradient(45deg, rgba(0,255,128,0.09) 0, rgba(0,255,128,0.09) 1px, transparent 1px, transparent 20px),
-          repeating-linear-gradient(-45deg, rgba(255,0,128,0.10) 0, rgba(255,0,128,0.10) 1px, transparent 1px, transparent 30px),
-          repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 80px),
-          radial-gradient(circle at 60% 40%, rgba(0,255,128,0.05) 0, transparent 60%);
-        background-size: 80px 80px, 40px 40px, 60px 60px, 80px 80px, 100% 100%;
-        background-position: 0 0, 0 0, 0 0, 40px 40px, center;
-      "
-		>
-			<div class="container mx-auto lg:py-8">
-				<div class="text-center mb-8">
-					<h1 class="text-3xl font-bold mb-2">Exile Tracker</h1>
-				</div>
-				<div class="flex flex-col items-center">
-					<div class="flex flex-row gap-4 items-center justify-center mb-6">
-						<a href="#" class="text-lg font-medium hover:text-pink-400 transition">Accounts</a>
-						<a href="#" class="text-lg font-medium hover:text-pink-400 transition">Characters</a>
-						<a href="#" class="text-lg font-medium hover:text-pink-400 transition">Snapshots</a>
+	@Layout() {
+		<div class="flex flex-col items-center">
+			if len(swe) > 0 {
+				<h2>
+					{ fmt.Sprintf("%s Snapshots by %s", swe[0].CharacterName, swe[0].AccountName) }
+				</h2>
+			}
+		</div>
+		<div class="flex flex-col gap-4 justify-center items-center bg-transparent md:pt-8">
+			<div id="characters-table" class="w-full max-w-4xl mx-auto border border-gray-600 rounded-lg overflow-hidden backdrop-blur-sm">
+				<div class="flex font-bold bg-gray-400 bg-opacity-15">
+					<div class="flex-1 px-4 py-3 border-r border-gray-600">
+						ID
 					</div>
-          <h2>
-            { fmt.Sprintf("%s Snapshots by %s", swe[0].CharacterName, swe[0].AccountName) }
-          </h2>
-					<!-- <label class="mb-1 text-sm text-gray-300" for="search-accounts">Search accounts</label> -->
-					<!-- <input -->
-					<!-- 	id="search-characters" -->
-					<!-- 	type="text" -->
-					<!-- 	placeholder="Search..." -->
-					<!-- 	class="input input-bordered w-64 text-black bg-transparent text-white" -->
-					<!-- 	hx-get={fmt.Sprintf("/accounts/%s/characters/search", accountId)} -->
-					<!-- 	hx-trigger="keyup changed delay:500ms" -->
-					<!-- 	hx-target="#characters-table" -->
-					<!-- 	hx-include="[name='q']" -->
-					<!-- 	name="q" -->
-          <!--        /> -->
+					<div class="flex-1 px-4 py-3 border-r border-gray-600">
+						PoB
+					</div>
+					<div class="text-white flex-1 px-4 py-3 border-r border-gray-600">
+						Fetched time
+					</div>
 				</div>
-				<div class="flex flex-col gap-4 justify-center items-center bg-transparent md:pt-8">
-					// Table
-					<div id="characters-table" class="w-full max-w-4xl mx-auto border border-gray-600 rounded-lg overflow-hidden backdrop-blur-sm">
-						// Header
-						<div class="flex font-bold bg-gray-400 bg-opacity-15">
-							<div class="flex-1 px-4 py-3 border-r border-gray-600">
-								ID
-							</div>
-							<div class="flex-1 px-4 py-3 border-r border-gray-600">
-							  PoB
-              </div>
-              <div class="text-white flex-1 px-4 py-3 border-r border-gray-600">
-							  Fetched time
-              </div>
-            </div>
-            for _, data := range swe {
-		            <div class="flex hover:bg-gray-700/50 transition-colors border-b border-gray-600 last:border-b-0">
-  								<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white break-all">
-	  								{ data.SnapshotData.ID }
-	  							</div>
-	  							<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
-	  								{ data.SnapshotData.ExportString }
-  								</div>
-                  <div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
-	  								{ time.Since(data.SnapshotData.CreatedAt).Truncate(time.Second) }
-  								</div>
-	  						</div>
-            }
-            </div>
-				</div>
+				for _, data := range swe {
+					<div class="flex hover:bg-gray-700/50 transition-colors border-b border-gray-600 last:border-b-0">
+						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white break-all">
+							{ data.SnapshotData.ID }
+						</div>
+						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
+							{ data.SnapshotData.ExportString }
+						</div>
+						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
+							{ time.Since(data.SnapshotData.CreatedAt).Truncate(time.Second).String() }
+						</div>
+					</div>
+				}
 			</div>
-		</body>
-	</html>
+		</div>
+	}
 }

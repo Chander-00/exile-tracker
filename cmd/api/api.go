@@ -11,6 +11,7 @@ import (
 	"github.com/ByChanderZap/exile-tracker/services/pobsnapshots"
 	"github.com/ByChanderZap/exile-tracker/utils"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 )
 
@@ -33,6 +34,11 @@ func NewAPIServer(addr string, db *repository.Repository) *APIServer {
 func (s *APIServer) Start() error {
 
 	router := chi.NewRouter()
+
+	// Global middleware — applies to all routes (API + frontend)
+	router.Use(middleware.Recoverer)
+	router.Use(utils.ZerologMiddleware(s.log))
+
 	v1Router := chi.NewRouter()
 	frontendRouter := chi.NewRouter()
 

@@ -50,7 +50,7 @@ func (h *Handler) handleGetAccountByID(w http.ResponseWriter, r *http.Request) {
 			utils.RespondWithError(w, http.StatusNotFound, fmt.Errorf("account not found"))
 			return
 		}
-		utils.RespondWithError(w, http.StatusNotFound, err)
+		utils.RespondWithError(w, http.StatusInternalServerError, err)
 		return
 	}
 	utils.WriteJSON(w, http.StatusOK, account)
@@ -59,6 +59,10 @@ func (h *Handler) handleGetAccountByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	var payload apimodels.CreateAccountInput
 	if err := utils.ParseJson(r, &payload); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := utils.ValidatePayload(&payload); err != nil {
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -85,6 +89,10 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
+	if err := utils.ValidatePayload(&payload); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err)
+		return
+	}
 
 	acc, err := h.repository.GetAccountByID(id)
 	if err != nil {
@@ -96,10 +104,15 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var player string
+	if payload.Player != nil {
+		player = *payload.Player
+	}
+
 	err = h.repository.UpdateAccount(repository.UpdateAccountParams{
 		ID:          acc.ID,
 		AccountName: payload.AccountName,
-		Player:      *payload.Player,
+		Player:      player,
 		UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {
