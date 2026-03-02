@@ -55,3 +55,6 @@ data.db
 
 # logs file
 logs.json
+
+# SSH host keys
+.ssh/
