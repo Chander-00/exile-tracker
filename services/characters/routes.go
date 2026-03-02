@@ -84,7 +84,7 @@ func (h *Handler) handleCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		utils.RespondWithError(w, http.StatusBadRequest, err)
 		return
 	}
-	err := h.repository.CreateCharacter(payload.AccountId, payload.CharacterName, payload.CurrentLeague)
+	_, err := h.repository.CreateCharacter(payload.AccountId, payload.CharacterName, payload.CurrentLeague)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, err)
 		return

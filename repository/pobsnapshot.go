@@ -79,7 +79,7 @@ func (r *Repository) GetSnapshotsByCharacter(characterId string) ([]models.POBSn
 	SELECT id, character_id, export_string, created_at, updated_at, deleted_at
 	FROM pobsnapshots
 	WHERE character_id = ?
-	ORDER BY created_at ASC
+	ORDER BY created_at DESC
 	`
 	rows, err := r.db.Query(query, characterId)
 	if err != nil {

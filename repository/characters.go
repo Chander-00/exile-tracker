@@ -82,7 +82,7 @@ func (r *Repository) GetCharactersByAccountId(accountId string) ([]models.Charac
 	return characters, nil
 }
 
-func (r *Repository) CreateCharacter(accountId string, characterName string, currentLeague string) error {
+func (r *Repository) CreateCharacter(accountId string, characterName string, currentLeague string) (string, error) {
 	query := `
 		INSERT INTO characters(id, account_id, character_name, current_league, created_at, updated_at)
 		VALUES(?,?,?,?,?,?)
@@ -93,7 +93,7 @@ func (r *Repository) CreateCharacter(accountId string, characterName string, cur
 	idString := uuid.New().String()
 	_, err := r.db.Exec(query, idString, accountId, characterName, currentLeague, now, now)
 
-	return err
+	return idString, err
 }
 
 func (r *Repository) UpdateDiedStatus(characterId string, died bool) error {

@@ -20,7 +20,7 @@ var keys = keyMap{
 		key.WithHelp("q", "quit"),
 	),
 	Back: key.NewBinding(
-		key.WithKeys("esc", "backspace"),
+		key.WithKeys("esc"),
 		key.WithHelp("esc", "back"),
 	),
 	Enter: key.NewBinding(

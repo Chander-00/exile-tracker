@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ByChanderZap/exile-tracker/repository"
@@ -28,6 +30,9 @@ type charactersList struct {
 	accountName  string
 	table        table.Model
 	characterIDs []string
+	allRows      []characterRow
+	search       textinput.Model
+	searching    bool
 	width        int
 	height       int
 	loading      bool
@@ -61,11 +66,16 @@ func newCharactersList(repo *repository.Repository, accountID, accountName strin
 		Bold(false)
 	t.SetStyles(s)
 
+	ti := textinput.New()
+	ti.Placeholder = "Search characters..."
+	ti.CharLimit = 64
+
 	return &charactersList{
 		repo:        repo,
 		accountID:   accountID,
 		accountName: accountName,
 		table:       t,
+		search:      ti,
 		width:       width,
 		height:      height,
 		loading:     true,
@@ -114,21 +124,36 @@ func (c *charactersList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c.err = msg.err
 			return c, nil
 		}
-		var rows []table.Row
-		c.characterIDs = nil
-		for _, ch := range msg.characters {
-			status := "Alive"
-			if ch.died {
-				status = "Dead"
-			}
-			rows = append(rows, table.Row{ch.characterName, ch.league, status, ch.updatedAt})
-			c.characterIDs = append(c.characterIDs, ch.id)
-		}
-		c.table.SetRows(rows)
+		c.allRows = msg.characters
+		c.applyFilter()
 		return c, nil
 
 	case tea.KeyMsg:
+		if c.searching {
+			switch msg.String() {
+			case "esc":
+				c.searching = false
+				c.search.Blur()
+				c.search.SetValue("")
+				c.applyFilter()
+				return c, nil
+			case "enter":
+				c.searching = false
+				c.search.Blur()
+				return c, nil
+			default:
+				var cmd tea.Cmd
+				c.search, cmd = c.search.Update(msg)
+				c.applyFilter()
+				return c, cmd
+			}
+		}
+
 		switch msg.String() {
+		case "/":
+			c.searching = true
+			c.search.Focus()
+			return c, nil
 		case "enter":
 			idx := c.table.Cursor()
 			if idx >= 0 && idx < len(c.characterIDs) {
@@ -142,6 +167,13 @@ func (c *charactersList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						model: newSnapshots(c.repo, charID, charName, c.width, c.height),
 						title: charName,
 					}
+				}
+			}
+		case "a":
+			return c, func() tea.Msg {
+				return pushViewMsg{
+					model: newAddCharacter(c.repo, c.accountID, c.width, c.height),
+					title: "Add Character",
 				}
 			}
 		case "r":
@@ -158,6 +190,27 @@ func (c *charactersList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
+func (c *charactersList) applyFilter() {
+	query := strings.ToLower(c.search.Value())
+	var rows []table.Row
+	c.characterIDs = nil
+	for _, ch := range c.allRows {
+		if query != "" &&
+			!strings.Contains(strings.ToLower(ch.characterName), query) &&
+			!strings.Contains(strings.ToLower(ch.league), query) {
+			continue
+		}
+		status := "Alive"
+		if ch.died {
+			status = "Dead"
+		}
+		rows = append(rows, table.Row{ch.characterName, ch.league, status, ch.updatedAt})
+		c.characterIDs = append(c.characterIDs, ch.id)
+	}
+	c.table.SetRows(rows)
+	c.table.GotoTop()
+}
+
 func (c *charactersList) View() string {
 	if c.loading {
 		return contentStyle.Render("Loading characters...")
@@ -170,7 +223,14 @@ func (c *charactersList) View() string {
 		fmt.Sprintf("Characters for %s (%d)", c.accountName, len(c.characterIDs)),
 	)
 
-	help := helpStyle.Render("enter: view snapshots | r: refresh | esc: back | q: back")
+	var searchLine string
+	if c.searching {
+		searchLine = "\n" + c.search.View() + "\n"
+	} else if c.search.Value() != "" {
+		searchLine = "\n" + helpStyle.Render(fmt.Sprintf("filter: %s", c.search.Value())) + "\n"
+	}
 
-	return contentStyle.Render(title + "\n\n" + c.table.View() + "\n\n" + help)
+	help := helpStyle.Render("enter: view snapshots | /: search | a: add character | r: refresh | esc: back | q: back")
+
+	return contentStyle.Render(title + searchLine + "\n" + c.table.View() + "\n\n" + help)
 }

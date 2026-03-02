@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ByChanderZap/exile-tracker/repository"
@@ -26,6 +28,9 @@ type accountsList struct {
 	repo       *repository.Repository
 	table      table.Model
 	accountIDs []string
+	allRows    []accountRow
+	search     textinput.Model
+	searching  bool
 	width      int
 	height     int
 	loading    bool
@@ -59,9 +64,14 @@ func newAccountsList(repo *repository.Repository, width, height int) *accountsLi
 		Bold(false)
 	t.SetStyles(s)
 
+	ti := textinput.New()
+	ti.Placeholder = "Search accounts..."
+	ti.CharLimit = 64
+
 	return &accountsList{
 		repo:    repo,
 		table:   t,
+		search:  ti,
 		width:   width,
 		height:  height,
 		loading: true,
@@ -110,17 +120,36 @@ func (a *accountsList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.err = msg.err
 			return a, nil
 		}
-		var rows []table.Row
-		a.accountIDs = nil
-		for _, acc := range msg.accounts {
-			rows = append(rows, table.Row{acc.accountName, acc.player, acc.createdAt, acc.updatedAt})
-			a.accountIDs = append(a.accountIDs, acc.id)
-		}
-		a.table.SetRows(rows)
+		a.allRows = msg.accounts
+		a.applyFilter()
 		return a, nil
 
 	case tea.KeyMsg:
+		if a.searching {
+			switch msg.String() {
+			case "esc":
+				a.searching = false
+				a.search.Blur()
+				a.search.SetValue("")
+				a.applyFilter()
+				return a, nil
+			case "enter":
+				a.searching = false
+				a.search.Blur()
+				return a, nil
+			default:
+				var cmd tea.Cmd
+				a.search, cmd = a.search.Update(msg)
+				a.applyFilter()
+				return a, cmd
+			}
+		}
+
 		switch msg.String() {
+		case "/":
+			a.searching = true
+			a.search.Focus()
+			return a, nil
 		case "enter":
 			idx := a.table.Cursor()
 			if idx >= 0 && idx < len(a.accountIDs) {
@@ -150,6 +179,23 @@ func (a *accountsList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
+func (a *accountsList) applyFilter() {
+	query := strings.ToLower(a.search.Value())
+	var rows []table.Row
+	a.accountIDs = nil
+	for _, acc := range a.allRows {
+		if query != "" &&
+			!strings.Contains(strings.ToLower(acc.accountName), query) &&
+			!strings.Contains(strings.ToLower(acc.player), query) {
+			continue
+		}
+		rows = append(rows, table.Row{acc.accountName, acc.player, acc.createdAt, acc.updatedAt})
+		a.accountIDs = append(a.accountIDs, acc.id)
+	}
+	a.table.SetRows(rows)
+	a.table.GotoTop()
+}
+
 func (a *accountsList) View() string {
 	if a.loading {
 		return contentStyle.Render("Loading accounts...")
@@ -162,7 +208,14 @@ func (a *accountsList) View() string {
 		fmt.Sprintf("Accounts (%d)", len(a.accountIDs)),
 	)
 
-	help := helpStyle.Render("enter: view characters | r: refresh | esc: back | q: back")
+	var searchLine string
+	if a.searching {
+		searchLine = "\n" + a.search.View() + "\n"
+	} else if a.search.Value() != "" {
+		searchLine = "\n" + helpStyle.Render(fmt.Sprintf("filter: %s", a.search.Value())) + "\n"
+	}
 
-	return contentStyle.Render(title + "\n\n" + a.table.View() + "\n\n" + help)
+	help := helpStyle.Render("enter: view characters | /: search | r: refresh | esc: back | q: back")
+
+	return contentStyle.Render(title + searchLine + "\n" + a.table.View() + "\n\n" + help)
 }
