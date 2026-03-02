@@ -1,0 +1,552 @@
+openapi: 3.0.3
+info:
+  title: Exile Tracker API
+  description: |
+    API for tracking Path of Exile characters, accounts, and Path of Building snapshots.
+
+    The application also exposes an SSH TUI on a separate port (default `:2222`) for
+    interactive terminal-based browsing of the same data.
+  version: 0.1.0
+  contact:
+    email: neryt.alexander@gmail.com
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Accounts
+    description: Manage PoE accounts
+  - name: Characters
+    description: Manage characters and tracking
+  - name: Snapshots
+    description: Path of Building export snapshots
+
+paths:
+  # ──────────────────────────────────────────────
+  # Accounts
+  # ──────────────────────────────────────────────
+  /api/v1/accounts:
+    get:
+      tags: [Accounts]
+      summary: List all accounts
+      operationId: getAccounts
+      responses:
+        "200":
+          description: List of accounts (empty array if none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Accounts]
+      summary: Create a new account
+      operationId: createAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccountInput"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                message: "Account created"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/accounts/{id}:
+    get:
+      tags: [Accounts]
+      summary: Get account by ID
+      operationId: getAccountById
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags: [Accounts]
+      summary: Update an account
+      operationId: updateAccount
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountInput"
+      responses:
+        "200":
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                message: "Account updated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────────────────────────────
+  # Characters
+  # ──────────────────────────────────────────────
+  /api/v1/characters:
+    get:
+      tags: [Characters]
+      summary: List all characters
+      operationId: getCharacters
+      responses:
+        "200":
+          description: List of characters (empty array if none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Characters]
+      summary: Create a new character
+      operationId: createCharacter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCharacterInput"
+      responses:
+        "201":
+          description: Character created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                message: "Character created"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/characters/{id}:
+    get:
+      tags: [Characters]
+      summary: Get character by ID
+      operationId: getCharacterById
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Character found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags: [Characters]
+      summary: Update a character
+      operationId: updateCharacter
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCharacterInput"
+      responses:
+        "200":
+          description: Character updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                message: "Character updated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/characters/{id}/kill:
+    patch:
+      tags: [Characters]
+      summary: Mark a character as dead
+      operationId: killCharacter
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Character marked as dead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                message: "Character killed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/characters/account/{accountId}:
+    get:
+      tags: [Characters]
+      summary: List characters for an account
+      operationId: getCharactersByAccount
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of characters (empty array if none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/characters/to-fetch:
+    get:
+      tags: [Characters]
+      summary: List tracked characters
+      operationId: getCharactersToFetch
+      responses:
+        "202":
+          description: List of tracked characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CharacterToFetch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [Characters]
+      summary: Add a character to tracking
+      operationId: addCharacterToFetch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCharacterToFetchInput"
+      responses:
+        "200":
+          description: Character is now tracked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+              example:
+                Message: "Character abc-123 is now tracked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────────────────────────────
+  # POB Snapshots
+  # ──────────────────────────────────────────────
+  /api/v1/pobsnapshots/{id}:
+    get:
+      tags: [Snapshots]
+      summary: Get snapshot by ID
+      operationId: getSnapshotById
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Snapshot found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/POBSnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/pobsnapshots/character/{characterId}:
+    get:
+      tags: [Snapshots]
+      summary: List all snapshots for a character
+      description: Returns snapshots ordered by creation date, newest first.
+      operationId: getSnapshotsByCharacter
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of snapshots (empty array if none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/POBSnapshot"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/pobsnapshots/character/{characterId}/latest:
+    get:
+      tags: [Snapshots]
+      summary: Get latest snapshot for a character
+      operationId: getLatestSnapshotByCharacter
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Latest snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/POBSnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ════════════════════════════════════════════════
+# Components
+# ════════════════════════════════════════════════
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request body or validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    # ── Responses ──────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    # ── Models ─────────────────────────────────
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_name:
+          type: string
+        player:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, account_name, created_at, updated_at]
+
+    Character:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        CharacterName:
+          type: string
+        died:
+          type: boolean
+        current_league:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, account_id, CharacterName, died, created_at, updated_at]
+
+    POBSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        character_id:
+          type: string
+          format: uuid
+        export_string:
+          type: string
+          description: Base64-encoded Path of Building export data
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, character_id, export_string, created_at, updated_at]
+
+    CharacterToFetch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        character_id:
+          type: string
+          format: uuid
+        last_fetch:
+          type: string
+          format: date-time
+          nullable: true
+        should_skip:
+          type: boolean
+      required: [id, character_id, should_skip]
+
+    # ── Inputs ─────────────────────────────────
+    CreateAccountInput:
+      type: object
+      properties:
+        account_name:
+          type: string
+        player:
+          type: string
+          nullable: true
+      required: [account_name]
+
+    UpdateAccountInput:
+      type: object
+      properties:
+        account_name:
+          type: string
+        player:
+          type: string
+          nullable: true
+      required: [account_name]
+
+    CreateCharacterInput:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        CharacterName:
+          type: string
+        died:
+          type: boolean
+          default: false
+        current_league:
+          type: string
+      required: [account_id, CharacterName, current_league]
+
+    UpdateCharacterInput:
+      type: object
+      properties:
+        character_name:
+          type: string
+        current_league:
+          type: string
+      required: [character_name, current_league]
+
+    AddCharacterToFetchInput:
+      type: object
+      properties:
+        character_id:
+          type: string
+          format: uuid
+      required: [character_id]
