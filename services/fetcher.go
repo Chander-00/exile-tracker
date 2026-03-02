@@ -255,7 +255,7 @@ func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, 
 	lines := strings.Split(output, "\n")
 	buildCode := strings.TrimSpace(lines[len(lines)-1])
 
-	uploadedBuild, err := buildsSitesClient.UploadBuild(buildCode, buildsSitesClient.SitesUrl.PoeNinja)
+	uploadedBuild, err := buildsSitesClient.UploadBuildWithFallback(buildCode)
 	if err != nil {
 		return "", fmt.Errorf("failed when uploading build: %w", err)
 	}

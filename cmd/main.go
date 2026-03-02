@@ -10,10 +10,11 @@ import (
 
 	"github.com/ByChanderZap/exile-tracker/cmd/api"
 	"github.com/ByChanderZap/exile-tracker/config"
-	"github.com/ByChanderZap/exile-tracker/db"
+	dbpkg "github.com/ByChanderZap/exile-tracker/db"
 	"github.com/ByChanderZap/exile-tracker/poeclient"
 	"github.com/ByChanderZap/exile-tracker/repository"
 	"github.com/ByChanderZap/exile-tracker/services"
+	sshserver "github.com/ByChanderZap/exile-tracker/ssh"
 	"github.com/ByChanderZap/exile-tracker/utils"
 	"github.com/rs/zerolog"
 )
@@ -21,17 +22,24 @@ import (
 func main() {
 	log := utils.ChildLogger("main")
 
-	db, err := db.NewSqliteStorage(config.Envs.DBPath)
+	database, err := dbpkg.NewSqliteStorage(config.Envs.DBPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")
 	}
 
-	initStorage(db, log)
-	repo := repository.NewRepository(db)
+	initStorage(database, log)
+
+	if err := dbpkg.RunMigrations(database, "migrations"); err != nil {
+		log.Fatal().Err(err).Msg("Failed to run migrations")
+	}
+	log.Info().Msg("Migrations completed successfully")
+
+	repo := repository.NewRepository(database)
 
 	server := api.NewAPIServer(config.Envs.Port, repo)
 	poeClient := poeclient.NewPoeClient(10 * time.Second)
 	fetcher := services.NewFetcherService(repo, poeClient, 20*time.Minute)
+	sshSrv := sshserver.NewSSHServer(config.Envs.SSHPort, config.Envs.SSHHostKeyPath, repo)
 
 	// Start server in a goroutine
 	go func() {
@@ -43,6 +51,13 @@ func main() {
 	/* Start fetcher service in a goroutine */
 	go func() {
 		fetcher.Start(context.Background())
+	}()
+
+	// Start SSH server in a goroutine
+	go func() {
+		if err := sshSrv.Start(); err != nil {
+			log.Fatal().Err(err).Msg("Failed to start SSH server")
+		}
 	}()
 
 	// Wait for shutdown signal
@@ -57,6 +72,11 @@ func main() {
 	// Stop API server gracefully
 	if err := server.Stop(ctx); err != nil {
 		log.Error().Err(err).Msg("Error shutting down API server")
+	}
+
+	// Stop SSH server gracefully
+	if err := sshSrv.Stop(ctx); err != nil {
+		log.Error().Err(err).Msg("Error shutting down SSH server")
 	}
 
 	// Stop fetcher gracefully

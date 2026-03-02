@@ -68,8 +68,9 @@ func NewPoeClient(timeout time.Duration) *POEClient {
 	}
 }
 
+const maxRetries = 3
+
 func (pc *POEClient) makeRequest(endpoint string, params map[string]string) (*http.Response, error) {
-	//parse url
 	u, err := url.Parse(pc.baseURL + endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
@@ -81,43 +82,84 @@ func (pc *POEClient) makeRequest(endpoint string, params map[string]string) (*ht
 	}
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("couldnt create request %w", err)
-	}
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("couldnt create request %w", err)
+		}
 
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("User-Agent", pc.userAgent)
+		req.Header.Add("Accept", "application/json")
+		req.Header.Add("User-Agent", pc.userAgent)
 
-	res, err := pc.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
+		res, err := pc.httpClient.Do(req)
+		if err != nil {
+			if attempt < maxRetries {
+				pc.log.Warn().Err(err).Int("attempt", attempt).Msg("Request failed, retrying after 2s")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, err)
+		}
 
-	rateLimitInfo := pc.parseRateLimitHeaders(res)
-	if rateLimitInfo.RetryAfter > 0 {
-		pc.log.Warn().
-			Int("retry_after", rateLimitInfo.RetryAfter).
-			Msg("Rate limited, should retry after seconds")
-	}
+		rateLimitInfo := pc.parseRateLimitHeaders(res)
 
-	if res.StatusCode >= 400 {
-		defer res.Body.Close()
+		// Preemptive rate-limit warning
+		for rule, limit := range rateLimitInfo.Limits {
+			if state, ok := rateLimitInfo.States[rule]; ok {
+				if state.CurrentHits >= limit.Max-1 {
+					pc.log.Warn().
+						Str("rule", rule).
+						Int("current_hits", state.CurrentHits).
+						Int("max", limit.Max).
+						Msg("Approaching rate limit")
+				}
+			}
+		}
 
 		if res.StatusCode == 429 {
-			return nil, fmt.Errorf("rate limit reached, retry after %d", rateLimitInfo.RetryAfter)
+			res.Body.Close()
+			if attempt < maxRetries {
+				waitSeconds := rateLimitInfo.RetryAfter
+				if waitSeconds <= 0 {
+					waitSeconds = 2
+				}
+				pc.log.Warn().
+					Int("attempt", attempt).
+					Int("retry_after", waitSeconds).
+					Msg("Rate limited, retrying")
+				time.Sleep(time.Duration(waitSeconds) * time.Second)
+				continue
+			}
+			return nil, fmt.Errorf("rate limit reached after %d attempts, retry after %d", maxRetries, rateLimitInfo.RetryAfter)
 		}
 
-		body, _ := io.ReadAll(res.Body)
-		var poeError POEError
-		err = json.Unmarshal(body, &poeError)
-		if err != nil {
-			return nil, fmt.Errorf("couldnt unmarshall error response %w", err)
+		if res.StatusCode >= 500 {
+			res.Body.Close()
+			if attempt < maxRetries {
+				pc.log.Warn().
+					Int("attempt", attempt).
+					Int("status", res.StatusCode).
+					Msg("Server error, retrying after 2s")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, fmt.Errorf("server error %d after %d attempts", res.StatusCode, maxRetries)
 		}
 
+		if res.StatusCode >= 400 {
+			defer res.Body.Close()
+			body, _ := io.ReadAll(res.Body)
+			var poeError POEError
+			if err := json.Unmarshal(body, &poeError); err != nil {
+				return nil, fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
+			}
+			return nil, fmt.Errorf("HTTP %d: %s", res.StatusCode, poeError.Error.Message)
+		}
+
+		return res, nil
 	}
 
-	return res, nil
+	return nil, fmt.Errorf("request failed after %d attempts", maxRetries)
 }
 
 func (pc *POEClient) parseRateLimitHeaders(res *http.Response) RateLimitInfo {
@@ -141,11 +183,23 @@ func (pc *POEClient) parseRateLimitHeaders(res *http.Response) RateLimitInfo {
 
 	for _, rule := range info.Rules {
 		if limitHeader := res.Header.Get("X-Rate-Limit-" + rule); limitHeader != "" {
-			info.Limits[rule] = RateLimit{}
+			parts := strings.Split(limitHeader, ",")
+			if len(parts) >= 3 {
+				max, _ := strconv.Atoi(parts[0])
+				period, _ := strconv.Atoi(parts[1])
+				restriction, _ := strconv.Atoi(parts[2])
+				info.Limits[rule] = RateLimit{Max: max, Period: period, Restriction: restriction}
+			}
 		}
 
 		if stateHeader := res.Header.Get("X-Rate-Limit-" + rule + "-State"); stateHeader != "" {
-			info.States[rule] = RateLimitState{}
+			parts := strings.Split(stateHeader, ",")
+			if len(parts) >= 3 {
+				currentHits, _ := strconv.Atoi(parts[0])
+				period, _ := strconv.Atoi(parts[1])
+				restricted, _ := strconv.Atoi(parts[2])
+				info.States[rule] = RateLimitState{CurrentHits: currentHits, Period: period, Restricted: restricted}
+			}
 		}
 	}
 

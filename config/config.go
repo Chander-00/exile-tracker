@@ -15,6 +15,9 @@ type Config struct {
 	DBPath                 string
 	POBRoot                string
 	LuajitPath             string
+	SSHPort                string
+	SSHHostKeyPath         string
+	SSHAdminKey            string // authorized_keys format public key
 }
 
 var Envs = initConfig()
@@ -30,6 +33,9 @@ func initConfig() Config {
 		DBPath:                 getEnv("DB_PATH", "./data.db"),
 		POBRoot:                getEnv("POB_ROOT", "/home/alexander/dev/goofing/PathOfBuilding"),
 		LuajitPath:             getEnv("LUAJIT_PATH", ""),
+		SSHPort:                getEnv("SSH_PORT", ":2222"),
+		SSHHostKeyPath:         getEnv("SSH_HOST_KEY_PATH", ".ssh/exile_tracker_ed25519"),
+		SSHAdminKey:            getEnv("SSH_ADMIN_KEY", ""),
 	}
 }
 
