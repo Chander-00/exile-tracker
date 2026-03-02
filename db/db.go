@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/pressly/goose/v3"
 )
 
 func NewSqliteStorage(dbPath string) (*sql.DB, error) {
@@ -21,4 +22,14 @@ func NewSqliteStorage(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func RunMigrations(db *sql.DB, migrationsDir string) error {
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		return fmt.Errorf("failed to set goose dialect: %w", err)
+	}
+	if err := goose.Up(db, migrationsDir); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+	return nil
 }

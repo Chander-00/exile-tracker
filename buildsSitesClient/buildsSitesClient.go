@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
+	"time"
+
+	"github.com/ByChanderZap/exile-tracker/utils"
 )
 
 // SiteInfo holds info for each build site
@@ -49,6 +53,30 @@ var SitesUrl = struct {
 	},
 }
 
+var FallbackOrder = []SiteInfo{
+	SitesUrl.PoeNinja,
+	SitesUrl.POBBin,
+	SitesUrl.Poedb,
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+func UploadBuildWithFallback(buildCode string) (string, error) {
+	log := utils.ChildLogger("builds-sites-client")
+	var errs []string
+	for _, site := range FallbackOrder {
+		result, err := UploadBuild(buildCode, site)
+		if err == nil {
+			return result, nil
+		}
+		log.Warn().Err(err).Str("site", site.Label).Msg("Upload failed, trying next site")
+		errs = append(errs, fmt.Sprintf("%s: %s", site.Label, err.Error()))
+	}
+	return "", fmt.Errorf("all upload sites failed: %s", strings.Join(errs, "; "))
+}
+
 func UploadBuild(buildCode string, site SiteInfo) (string, error) {
 	if site.PostURL == "" {
 		return "", fmt.Errorf("no post URL for site %s", site.Label)
@@ -62,8 +90,7 @@ func UploadBuild(buildCode string, site SiteInfo) (string, error) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "exile-tracker/0.0.1 (contact: neryt.alexander@gmail.com)")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
