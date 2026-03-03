@@ -18,6 +18,7 @@ type Config struct {
 	SSHPort                string
 	SSHHostKeyPath         string
 	SSHAdminKey            string // authorized_keys format public key
+	APIKey                 string
 }
 
 var Envs = initConfig()
@@ -36,6 +37,7 @@ func initConfig() Config {
 		SSHPort:                getEnv("SSH_PORT", ":2222"),
 		SSHHostKeyPath:         getEnv("SSH_HOST_KEY_PATH", ".ssh/exile_tracker_ed25519"),
 		SSHAdminKey:            getEnv("SSH_ADMIN_KEY", ""),
+		APIKey:                 getEnv("API_KEY", ""),
 	}
 }
 

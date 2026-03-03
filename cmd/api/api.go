@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/ByChanderZap/exile-tracker/config"
 	"github.com/ByChanderZap/exile-tracker/repository"
 	"github.com/ByChanderZap/exile-tracker/services/accounts"
 	"github.com/ByChanderZap/exile-tracker/services/characters"
@@ -40,6 +41,7 @@ func (s *APIServer) Start() error {
 	router.Use(utils.ZerologMiddleware(s.log))
 
 	v1Router := chi.NewRouter()
+	v1Router.Use(utils.APIKeyMiddleware(config.Envs.APIKey))
 	frontendRouter := chi.NewRouter()
 
 	// character endpoints
