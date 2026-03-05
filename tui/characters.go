@@ -16,34 +16,46 @@ type charactersDataMsg struct {
 	err        error
 }
 
+type characterDisabledMsg struct {
+	err error
+}
+
+type characterDeletedMsg struct {
+	err error
+}
+
 type characterRow struct {
 	id            string
 	characterName string
 	league        string
 	died          bool
+	disabled      bool
 	updatedAt     string
 }
 
 type charactersList struct {
-	repo         *repository.Repository
-	accountID    string
-	accountName  string
-	table        table.Model
-	characterIDs []string
-	allRows      []characterRow
-	search       textinput.Model
-	searching    bool
-	width        int
-	height       int
-	loading      bool
-	err          error
+	repo          *repository.Repository
+	isAdmin       bool
+	accountID     string
+	accountName   string
+	table         table.Model
+	characterIDs  []string
+	allRows       []characterRow
+	search        textinput.Model
+	searching     bool
+	confirmDelete bool
+	width         int
+	height        int
+	loading       bool
+	err           error
 }
 
-func newCharactersList(repo *repository.Repository, accountID, accountName string, width, height int) *charactersList {
+func newCharactersList(repo *repository.Repository, isAdmin bool, accountID, accountName string, width, height int) *charactersList {
 	columns := []table.Column{
 		{Title: "Character", Width: 25},
 		{Title: "League", Width: 20},
 		{Title: "Status", Width: 10},
+		{Title: "Fetch", Width: 10},
 		{Title: "Updated", Width: 20},
 	}
 
@@ -70,8 +82,11 @@ func newCharactersList(repo *repository.Repository, accountID, accountName strin
 	ti.Placeholder = "Search characters..."
 	ti.CharLimit = 64
 
+	enableJKNav(&t)
+
 	return &charactersList{
 		repo:        repo,
+		isAdmin:     isAdmin,
 		accountID:   accountID,
 		accountName: accountName,
 		table:       t,
@@ -103,6 +118,7 @@ func (c *charactersList) loadCharacters() tea.Cmd {
 				characterName: ch.CharacterName,
 				league:        league,
 				died:          ch.Died,
+				disabled:      ch.Disabled,
 				updatedAt:     ch.UpdatedAt.Format("2006-01-02 15:04"),
 			})
 		}
@@ -128,7 +144,41 @@ func (c *charactersList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		c.applyFilter()
 		return c, nil
 
+	case characterDisabledMsg:
+		if msg.err != nil {
+			c.err = msg.err
+			return c, nil
+		}
+		return c, c.loadCharacters()
+
+	case characterDeletedMsg:
+		if msg.err != nil {
+			c.err = msg.err
+			return c, nil
+		}
+		c.loading = true
+		return c, c.loadCharacters()
+
 	case tea.KeyMsg:
+		if c.confirmDelete {
+			switch msg.String() {
+			case "y", "Y":
+				c.confirmDelete = false
+				idx := c.table.Cursor()
+				if idx >= 0 && idx < len(c.characterIDs) {
+					charID := c.characterIDs[idx]
+					return c, func() tea.Msg {
+						err := c.repo.SoftDeleteCharacter(charID)
+						return characterDeletedMsg{err: err}
+					}
+				}
+				return c, nil
+			default:
+				c.confirmDelete = false
+				return c, nil
+			}
+		}
+
 		if c.searching {
 			switch msg.String() {
 			case "esc":
@@ -169,7 +219,55 @@ func (c *charactersList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		case "d":
+			if !c.isAdmin {
+				return c, nil
+			}
+			idx := c.table.Cursor()
+			if idx >= 0 && idx < len(c.characterIDs) {
+				charID := c.characterIDs[idx]
+				return c, func() tea.Msg {
+					err := c.repo.ToggleDisabled(charID)
+					return characterDisabledMsg{err: err}
+				}
+			}
+		case "e":
+			if !c.isAdmin {
+				return c, nil
+			}
+			idx := c.table.Cursor()
+			if idx >= 0 && idx < len(c.characterIDs) {
+				row := c.allRows[idx]
+				return c, func() tea.Msg {
+					return pushViewMsg{
+						model: newEditCharacter(c.repo, row.id, row.characterName, row.league, row.died, c.width, c.height),
+						title: "Edit " + row.characterName,
+					}
+				}
+			}
+		case "x":
+			if !c.isAdmin {
+				return c, nil
+			}
+			idx := c.table.Cursor()
+			if idx >= 0 && idx < len(c.characterIDs) {
+				c.confirmDelete = true
+				return c, nil
+			}
+		case "t":
+			if !c.isAdmin {
+				return c, nil
+			}
+			return c, func() tea.Msg {
+				return pushViewMsg{
+					model: newTrashCharactersList(c.repo, c.isAdmin, c.accountID, c.accountName, c.width, c.height),
+					title: "Trash",
+				}
+			}
 		case "a":
+			if !c.isAdmin {
+				return c, nil
+			}
 			return c, func() tea.Msg {
 				return pushViewMsg{
 					model: newAddCharacter(c.repo, c.accountID, c.width, c.height),
@@ -204,7 +302,11 @@ func (c *charactersList) applyFilter() {
 		if ch.died {
 			status = "Dead"
 		}
-		rows = append(rows, table.Row{ch.characterName, ch.league, status, ch.updatedAt})
+		fetch := "Enabled"
+		if ch.disabled {
+			fetch = "Disabled"
+		}
+		rows = append(rows, table.Row{ch.characterName, ch.league, status, fetch, ch.updatedAt})
 		c.characterIDs = append(c.characterIDs, ch.id)
 	}
 	c.table.SetRows(rows)
@@ -230,7 +332,22 @@ func (c *charactersList) View() string {
 		searchLine = "\n" + helpStyle.Render(fmt.Sprintf("filter: %s", c.search.Value())) + "\n"
 	}
 
-	help := helpStyle.Render("enter: view snapshots | /: search | a: add character | r: refresh | esc: back | q: back")
+	var confirmLine string
+	if c.confirmDelete {
+		idx := c.table.Cursor()
+		name := ""
+		if idx >= 0 && idx < len(c.allRows) {
+			name = c.allRows[idx].characterName
+		}
+		confirmLine = "\n" + errorStyle.Render(fmt.Sprintf("Delete character %q and all its snapshots? (y/n)", name)) + "\n"
+	}
 
-	return contentStyle.Render(title + searchLine + "\n" + c.table.View() + "\n\n" + help)
+	help := "enter: view | /: search"
+	if c.isAdmin {
+		help += " | e: edit | x: delete | d: toggle fetch | t: trash | a: add"
+	}
+	help += " | r: refresh | q: back"
+	helpLine := helpStyle.Render(help)
+
+	return contentStyle.Render(title + searchLine + confirmLine + "\n" + c.table.View() + "\n\n" + helpLine)
 }

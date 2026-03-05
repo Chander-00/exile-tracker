@@ -1,4 +1,4 @@
-.PHONY: build run test clean deps help
+.PHONY: build run test clean deps help docker-build docker-up docker-down docker-logs
 
 # Binary name
 BINARY_NAME=exile-tracker
@@ -62,13 +62,20 @@ clean: ## Clean build artifacts
 	rm -rf $(BUILD_DIR)
 	rm -f coverage.out
 
-# docker-build: ## Build Docker image
-# 	@echo "Building Docker image..."
-# 	docker build -t $(BINARY_NAME) .
+docker-build: ## Build Docker image
+	@echo "Building Docker image..."
+	docker compose build
 
-# docker-run: ## Run Docker container
-# 	@echo "Running Docker container..."
-# 	docker run -p 8080:8080 $(BINARY_NAME)
+docker-up: ## Start all services
+	@echo "Starting services..."
+	docker compose up -d --build
+
+docker-down: ## Stop all services
+	@echo "Stopping services..."
+	docker compose down
+
+docker-logs: ## Show logs from all services
+	docker compose logs -f
 
 lint: ## Run linter
 	@echo "Running linter..."

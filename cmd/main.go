@@ -8,6 +8,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/ByChanderZap/exile-tracker/cmd/api"
 	"github.com/ByChanderZap/exile-tracker/config"
 	dbpkg "github.com/ByChanderZap/exile-tracker/db"
@@ -20,6 +23,10 @@ import (
 )
 
 func main() {
+	// Force ANSI256 on the existing default renderer so global lipgloss styles
+	// (which already hold a pointer to it) render colors inside Docker.
+	lipgloss.DefaultRenderer().SetColorProfile(termenv.ANSI256)
+
 	log := utils.ChildLogger("main")
 
 	database, err := dbpkg.NewSqliteStorage(config.Envs.DBPath)
@@ -38,7 +45,7 @@ func main() {
 
 	server := api.NewAPIServer(config.Envs.Port, repo)
 	poeClient := poeclient.NewPoeClient(10 * time.Second)
-	fetcher := services.NewFetcherService(repo, poeClient, 20*time.Minute)
+	fetcher := services.NewFetcherService(repo, poeClient, config.Envs.FetchInterval)
 	sshSrv := sshserver.NewSSHServer(config.Envs.SSHPort, config.Envs.SSHHostKeyPath, repo)
 
 	// Start server in a goroutine

@@ -37,7 +37,11 @@ func (r *Repository) GetDashboardStats() (DashboardStats, error) {
 		return stats, err
 	}
 
-	err = r.db.QueryRow("SELECT COUNT(*) FROM characters_to_fetch WHERE should_skip = 0").Scan(&stats.FetchQueueSize)
+	err = r.db.QueryRow(`
+		SELECT COUNT(*) FROM characters_to_fetch ctf
+		JOIN characters c ON c.id = ctf.character_id
+		WHERE ctf.should_skip = 0 AND c.disabled = 0 AND c.deleted_at IS NULL
+	`).Scan(&stats.FetchQueueSize)
 	if err != nil {
 		return stats, err
 	}
@@ -47,7 +51,7 @@ func (r *Repository) GetDashboardStats() (DashboardStats, error) {
 
 func (r *Repository) GetRecentlyUpdatedCharacters(limit int) ([]RecentCharacter, error) {
 	query := `
-	SELECT c.id, c.account_id, c.character_name, c.died, c.current_league,
+	SELECT c.id, c.account_id, c.character_name, c.died, c.disabled, c.current_league,
 	       c.created_at, c.updated_at, a.account_name
 	FROM characters c
 	INNER JOIN accounts a ON a.id = c.account_id
@@ -72,6 +76,7 @@ func (r *Repository) GetRecentlyUpdatedCharacters(limit int) ([]RecentCharacter,
 			&rc.AccountId,
 			&rc.CharacterName,
 			&rc.Died,
+			&rc.Disabled,
 			&rc.CurrentLeague,
 			&createdAt,
 			&updatedAt,

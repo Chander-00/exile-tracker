@@ -1,0 +1,52 @@
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Database
+data.db
+data/
+
+# SSH keys
+.ssh/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs and misc
+docs/
+*.md
+LICENSE
+
+# Logs
+*.log
+logs/
+logs.json
+
+# Temp files
+tmp/
+temp/
+
+# Nginx config (mounted separately, not baked into app image)
+nginx/

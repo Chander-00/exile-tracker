@@ -31,10 +31,12 @@ type FetcherService struct {
 }
 
 func NewFetcherService(repo *repository.Repository, poeClient *poeclient.POEClient, interval time.Duration) *FetcherService {
+	log := utils.ChildLogger("fetcher")
+	log.Info().Msgf("Updates will be generated every %s", interval)
 	return &FetcherService{
 		repo:      repo,
 		poeClient: poeClient,
-		log:       utils.ChildLogger("fetcher"),
+		log:       log,
 		ticker:    time.NewTicker(interval),
 		done:      make(chan struct{}, 1),
 	}

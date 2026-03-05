@@ -1,17 +1,19 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ByChanderZap/exile-tracker/repository"
 )
 
-type characterCreatedMsg struct {
+type accountUpdatedMsg struct {
 	err error
 }
 
-type addCharacter struct {
+type editAccount struct {
 	repo      *repository.Repository
 	accountID string
 	inputs    []textinput.Model
@@ -23,39 +25,41 @@ type addCharacter struct {
 	err       error
 }
 
-func newAddCharacter(repo *repository.Repository, accountID string, width, height int) *addCharacter {
+func newEditAccount(repo *repository.Repository, accountID, accountName, player string, width, height int) *editAccount {
 	nameInput := textinput.New()
-	nameInput.Placeholder = "Character name (required)"
-	nameInput.Prompt = "Character Name: "
+	nameInput.Placeholder = "Account name (required)"
+	nameInput.Prompt = "Account Name: "
 	nameInput.CharLimit = 100
+	nameInput.SetValue(accountName)
 	nameInput.Focus()
 
-	leagueInput := textinput.New()
-	leagueInput.Placeholder = "Current league (required)"
-	leagueInput.Prompt = "Current League: "
-	leagueInput.CharLimit = 100
+	playerInput := textinput.New()
+	playerInput.Placeholder = "Player name (optional)"
+	playerInput.Prompt = "Player: "
+	playerInput.CharLimit = 100
+	playerInput.SetValue(player)
 
-	return &addCharacter{
+	return &editAccount{
 		repo:      repo,
 		accountID: accountID,
-		inputs:    []textinput.Model{nameInput, leagueInput},
+		inputs:    []textinput.Model{nameInput, playerInput},
 		width:     width,
 		height:    height,
 	}
 }
 
-func (a *addCharacter) Init() tea.Cmd {
+func (a *editAccount) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (a *addCharacter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (a *editAccount) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
 		return a, nil
 
-	case characterCreatedMsg:
+	case accountUpdatedMsg:
 		a.submitted = false
 		if msg.err != nil {
 			a.err = msg.err
@@ -87,22 +91,21 @@ func (a *addCharacter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 
 		case "enter":
-			characterName := a.inputs[0].Value()
-			currentLeague := a.inputs[1].Value()
-			if characterName == "" || currentLeague == "" {
+			accountName := a.inputs[0].Value()
+			if accountName == "" {
 				a.err = nil
 				return a, nil
 			}
+			player := a.inputs[1].Value()
 			a.submitted = true
 			return a, func() tea.Msg {
-				charID, err := a.repo.CreateCharacter(a.accountID, characterName, currentLeague)
-				if err != nil {
-					return characterCreatedMsg{err: err}
-				}
-				err = a.repo.AddCharacterToFetch(repository.AddCharactersToFetchParams{
-					CharacterId: charID,
+				err := a.repo.UpdateAccount(repository.UpdateAccountParams{
+					ID:          a.accountID,
+					AccountName: accountName,
+					Player:      player,
+					UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
 				})
-				return characterCreatedMsg{err: err}
+				return accountUpdatedMsg{err: err}
 			}
 
 		case "esc":
@@ -115,21 +118,20 @@ func (a *addCharacter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Update focused input
 	var cmd tea.Cmd
 	a.inputs[a.focusIdx], cmd = a.inputs[a.focusIdx].Update(msg)
 	return a, cmd
 }
 
-func (a *addCharacter) View() string {
+func (a *editAccount) View() string {
 	if a.success {
 		return contentStyle.Render(
-			successStyle.Render("Character created successfully!") + "\n\n" +
+			successStyle.Render("Account updated successfully!") + "\n\n" +
 				helpStyle.Render("Press enter to go back"),
 		)
 	}
 
-	title := lipgloss.NewStyle().Bold(true).Foreground(gold).Render("Add New Character")
+	title := lipgloss.NewStyle().Bold(true).Foreground(gold).Render("Edit Account")
 
 	var errMsg string
 	if a.err != nil {
@@ -138,7 +140,7 @@ func (a *addCharacter) View() string {
 
 	status := ""
 	if a.submitted {
-		status = "\n" + helpStyle.Render("Creating character...")
+		status = "\n" + helpStyle.Render("Updating account...")
 	}
 
 	help := helpStyle.Render("tab: next field | enter: submit | esc: cancel")

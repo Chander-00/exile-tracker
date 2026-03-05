@@ -134,8 +134,8 @@ func (a *addAccount) View() string {
 
 	return contentStyle.Render(
 		title + "\n\n" +
-			a.inputs[0].View() + "\n\n" +
-			a.inputs[1].View() + "\n" +
+			renderInput(a.inputs[0], a.focusIdx == 0) + "\n\n" +
+			renderInput(a.inputs[1], a.focusIdx == 1) + "\n" +
 			errMsg + status + "\n\n" +
 			help,
 	)

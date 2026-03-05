@@ -94,6 +94,91 @@ func (r *Repository) UpdateAccount(arg UpdateAccountParams) error {
 	return nil
 }
 
+func (r *Repository) SoftDeleteAccount(id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Soft delete all snapshots for all characters of this account
+	_, err := r.db.Exec(`
+		UPDATE pobsnapshots SET deleted_at = ?
+		WHERE character_id IN (SELECT id FROM characters WHERE account_id = ?) AND deleted_at IS NULL
+	`, now, id)
+	if err != nil {
+		return err
+	}
+
+	// Soft delete all characters of this account
+	_, err = r.db.Exec(`
+		UPDATE characters SET deleted_at = ?
+		WHERE account_id = ? AND deleted_at IS NULL
+	`, now, id)
+	if err != nil {
+		return err
+	}
+
+	// Soft delete the account
+	_, err = r.db.Exec(`
+		UPDATE accounts SET deleted_at = ?
+		WHERE id = ?
+	`, now, id)
+	return err
+}
+
+func (r *Repository) GetDeletedAccounts() ([]models.Account, error) {
+	query := "SELECT id, account_name, player, updated_at, created_at FROM accounts WHERE deleted_at IS NOT NULL"
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []models.Account
+	for rows.Next() {
+		var acc models.Account
+		err := rows.Scan(&acc.ID, &acc.AccountName, &acc.Player, &acc.UpdatedAt, &acc.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, acc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
+func (r *Repository) RestoreAccount(id string) error {
+	// Restore the account
+	_, err := r.db.Exec(`UPDATE accounts SET deleted_at = NULL WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	// Restore all characters of this account
+	_, err = r.db.Exec(`UPDATE characters SET deleted_at = NULL WHERE account_id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	// Restore all snapshots for those characters
+	_, err = r.db.Exec(`
+		UPDATE pobsnapshots SET deleted_at = NULL
+		WHERE character_id IN (SELECT id FROM characters WHERE account_id = ?)
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	// Re-add characters to fetch queue (skip ones already there)
+	_, err = r.db.Exec(`
+		INSERT INTO characters_to_fetch (id, character_id)
+		SELECT hex(randomblob(16)), c.id
+		FROM characters c
+		WHERE c.account_id = ? AND c.deleted_at IS NULL
+		AND c.id NOT IN (SELECT character_id FROM characters_to_fetch)
+	`, id)
+	return err
+}
+
 func (r *Repository) SearchAccounts(searchTerm string) ([]models.Account, error) {
 	query := `
 	SELECT id, account_name, player, updated_at, created_at 

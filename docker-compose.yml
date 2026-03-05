@@ -1,0 +1,26 @@
+services:
+  exile-tracker:
+    build: .
+    env_file: .env
+    volumes:
+      - sqlite-data:/app/data
+      - ssh-keys:/app/.ssh
+    ports:
+      - "2222:2222"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - exile-tracker
+    restart: unless-stopped
+
+volumes:
+  sqlite-data:
+  ssh-keys:

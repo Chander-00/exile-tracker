@@ -58,3 +58,7 @@ logs.json
 
 # SSH host keys
 .ssh/
+
+# Nginx TLS certificates (Cloudflare origin certs — secrets)
+nginx/certs/*.pem
+nginx/certs/*.key

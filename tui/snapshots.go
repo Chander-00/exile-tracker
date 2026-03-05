@@ -2,9 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,12 +16,6 @@ type snapshotsDataMsg struct {
 	err       error
 }
 
-type clipboardResultMsg struct {
-	err error
-}
-
-type clearNotificationMsg struct{}
-
 type snapshots struct {
 	repo        *repository.Repository
 	characterID string
@@ -34,9 +26,8 @@ type snapshots struct {
 	showExport  bool
 	width       int
 	height      int
-	loading      bool
-	err          error
-	notification string
+	loading     bool
+	err         error
 }
 
 func newSnapshots(repo *repository.Repository, characterID, charName string, width, height int) *snapshots {
@@ -67,6 +58,8 @@ func newSnapshots(repo *repository.Repository, characterID, charName string, wid
 
 	vp := viewport.New(width-4, height-6)
 
+	enableJKNav(&t)
+
 	return &snapshots{
 		repo:        repo,
 		characterID: characterID,
@@ -81,13 +74,6 @@ func newSnapshots(repo *repository.Repository, characterID, charName string, wid
 
 func (sn *snapshots) Init() tea.Cmd {
 	return sn.loadSnapshots()
-}
-
-func (sn *snapshots) copyToClipboard(text string) tea.Cmd {
-	return func() tea.Msg {
-		err := clipboard.WriteAll(text)
-		return clipboardResultMsg{err: err}
-	}
 }
 
 func (sn *snapshots) loadSnapshots() tea.Cmd {
@@ -108,20 +94,6 @@ func (sn *snapshots) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sn.table.SetHeight(sn.height - 10)
 		sn.viewport.Width = sn.width - 4
 		sn.viewport.Height = sn.height - 6
-		return sn, nil
-
-	case clipboardResultMsg:
-		if msg.err != nil {
-			sn.notification = "Could not copy to clipboard, please copy manually"
-		} else {
-			sn.notification = "Copied to clipboard!"
-		}
-		return sn, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
-			return clearNotificationMsg{}
-		})
-
-	case clearNotificationMsg:
-		sn.notification = ""
 		return sn, nil
 
 	case snapshotsDataMsg:
@@ -151,13 +123,6 @@ func (sn *snapshots) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "esc", "backspace", "q":
 				sn.showExport = false
-				sn.notification = ""
-				return sn, nil
-			case "c":
-				idx := sn.table.Cursor()
-				if idx >= 0 && idx < len(sn.data) {
-					return sn, sn.copyToClipboard(sn.data[idx].ExportString)
-				}
 				return sn, nil
 			}
 			var cmd tea.Cmd
@@ -172,7 +137,7 @@ func (sn *snapshots) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				sn.viewport.SetContent(sn.data[idx].ExportString)
 				sn.viewport.GotoTop()
 				sn.showExport = true
-				return sn, sn.copyToClipboard(sn.data[idx].ExportString)
+				return sn, nil
 			}
 		case "r":
 			sn.loading = true
@@ -198,16 +163,8 @@ func (sn *snapshots) View() string {
 
 	if sn.showExport {
 		title := lipgloss.NewStyle().Bold(true).Foreground(gold).Render("PoB Export String")
-		notif := ""
-		if sn.notification != "" {
-			style := lipgloss.NewStyle().Bold(true).Foreground(gold)
-			if sn.notification != "Copied to clipboard!" {
-				style = errorStyle
-			}
-			notif = "\n" + style.Render(sn.notification)
-		}
-		help := helpStyle.Render("scroll: up/down | c: copy | esc: back to list")
-		return contentStyle.Render(title + notif + "\n\n" + sn.viewport.View() + "\n\n" + help)
+		help := helpStyle.Render("scroll: up/down | esc: back to list")
+		return contentStyle.Render(title + "\n\n" + sn.viewport.View() + "\n\n" + help)
 	}
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(gold).Render(

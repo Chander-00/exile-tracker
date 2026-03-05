@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
 	// PoE-inspired color palette
@@ -68,4 +72,28 @@ var (
 	successStyle = lipgloss.NewStyle().
 			Foreground(green).
 			Bold(true)
+
+	focusedInputStyle = lipgloss.NewStyle().
+				Foreground(gold).
+				Bold(true)
+
+	blurredInputStyle = lipgloss.NewStyle().
+				Foreground(dimGray)
 )
+
+// renderInput renders a text input with a visual focus indicator.
+func renderInput(ti textinput.Model, focused bool) string {
+	indicator := "  "
+	if focused {
+		indicator = focusedInputStyle.Render("▸ ")
+	}
+	return indicator + ti.View()
+}
+
+// enableJKNav adds j/k keys to a table's up/down keybindings.
+func enableJKNav(t *table.Model) {
+	km := t.KeyMap
+	km.LineDown.SetKeys("down", "j")
+	km.LineUp.SetKeys("up", "k")
+	t.KeyMap = km
+}

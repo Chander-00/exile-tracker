@@ -23,6 +23,7 @@ type Character struct {
 	AccountId     string  `json:"account_id"`
 	CharacterName string  `json:"CharacterName"`
 	Died          bool    `json:"died"`
+	Disabled      bool    `json:"disabled"`
 	CurrentLeague *string `json:"current_league"`
 
 	CreatedAt time.Time  `json:"created_at"`

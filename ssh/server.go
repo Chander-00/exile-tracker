@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/wish"
 	bm "github.com/charmbracelet/wish/bubbletea"
 	lm "github.com/charmbracelet/wish/logging"
+	"github.com/muesli/termenv"
 	"github.com/rs/zerolog"
 
 	"github.com/ByChanderZap/exile-tracker/repository"
@@ -40,7 +41,7 @@ func (s *SSHServer) Start() error {
 		wish.WithHostKeyPath(s.hostKeyPath),
 		wish.WithPublicKeyAuth(PublicKeyHandler),
 		wish.WithMiddleware(
-			bm.Middleware(s.teaHandler()),
+			bm.MiddlewareWithColorProfile(s.teaHandler(), termenv.ANSI256),
 			lm.Middleware(),
 		),
 	)

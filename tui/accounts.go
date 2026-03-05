@@ -16,6 +16,10 @@ type accountsDataMsg struct {
 	err      error
 }
 
+type accountDeletedMsg struct {
+	err error
+}
+
 type accountRow struct {
 	id          string
 	accountName string
@@ -25,19 +29,21 @@ type accountRow struct {
 }
 
 type accountsList struct {
-	repo       *repository.Repository
-	table      table.Model
-	accountIDs []string
-	allRows    []accountRow
-	search     textinput.Model
-	searching  bool
-	width      int
-	height     int
-	loading    bool
-	err        error
+	repo          *repository.Repository
+	isAdmin       bool
+	table         table.Model
+	accountIDs    []string
+	allRows       []accountRow
+	search        textinput.Model
+	searching     bool
+	confirmDelete bool
+	width         int
+	height        int
+	loading       bool
+	err           error
 }
 
-func newAccountsList(repo *repository.Repository, width, height int) *accountsList {
+func newAccountsList(repo *repository.Repository, isAdmin bool, width, height int) *accountsList {
 	columns := []table.Column{
 		{Title: "Account Name", Width: 25},
 		{Title: "Player", Width: 20},
@@ -68,8 +74,11 @@ func newAccountsList(repo *repository.Repository, width, height int) *accountsLi
 	ti.Placeholder = "Search accounts..."
 	ti.CharLimit = 64
 
+	enableJKNav(&t)
+
 	return &accountsList{
 		repo:    repo,
+		isAdmin: isAdmin,
 		table:   t,
 		search:  ti,
 		width:   width,
@@ -124,7 +133,34 @@ func (a *accountsList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.applyFilter()
 		return a, nil
 
+	case accountDeletedMsg:
+		if msg.err != nil {
+			a.err = msg.err
+			return a, nil
+		}
+		a.loading = true
+		return a, a.loadAccounts()
+
 	case tea.KeyMsg:
+		if a.confirmDelete {
+			switch msg.String() {
+			case "y", "Y":
+				a.confirmDelete = false
+				idx := a.table.Cursor()
+				if idx >= 0 && idx < len(a.accountIDs) {
+					accountID := a.accountIDs[idx]
+					return a, func() tea.Msg {
+						err := a.repo.SoftDeleteAccount(accountID)
+						return accountDeletedMsg{err: err}
+					}
+				}
+				return a, nil
+			default:
+				a.confirmDelete = false
+				return a, nil
+			}
+		}
+
 		if a.searching {
 			switch msg.String() {
 			case "esc":
@@ -160,10 +196,33 @@ func (a *accountsList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return a, func() tea.Msg {
 					return pushViewMsg{
-						model: newCharactersList(a.repo, accountID, accountName, a.width, a.height),
+						model: newCharactersList(a.repo, a.isAdmin, accountID, accountName, a.width, a.height),
 						title: accountName,
 					}
 				}
+			}
+		case "e":
+			if !a.isAdmin {
+				return a, nil
+			}
+			idx := a.table.Cursor()
+			if idx >= 0 && idx < len(a.accountIDs) {
+				row := a.allRows[idx]
+				return a, func() tea.Msg {
+					return pushViewMsg{
+						model: newEditAccount(a.repo, row.id, row.accountName, row.player, a.width, a.height),
+						title: "Edit " + row.accountName,
+					}
+				}
+			}
+		case "x":
+			if !a.isAdmin {
+				return a, nil
+			}
+			idx := a.table.Cursor()
+			if idx >= 0 && idx < len(a.accountIDs) {
+				a.confirmDelete = true
+				return a, nil
 			}
 		case "r":
 			a.loading = true
@@ -215,7 +274,22 @@ func (a *accountsList) View() string {
 		searchLine = "\n" + helpStyle.Render(fmt.Sprintf("filter: %s", a.search.Value())) + "\n"
 	}
 
-	help := helpStyle.Render("enter: view characters | /: search | r: refresh | esc: back | q: back")
+	var confirmLine string
+	if a.confirmDelete {
+		idx := a.table.Cursor()
+		name := ""
+		if idx >= 0 && idx < len(a.allRows) {
+			name = a.allRows[idx].accountName
+		}
+		confirmLine = "\n" + errorStyle.Render(fmt.Sprintf("Delete account %q and all its characters? (y/n)", name)) + "\n"
+	}
 
-	return contentStyle.Render(title + searchLine + "\n" + a.table.View() + "\n\n" + help)
+	help := "enter: view | /: search"
+	if a.isAdmin {
+		help += " | e: edit | x: delete"
+	}
+	help += " | r: refresh | esc: back | q: back"
+	helpLine := helpStyle.Render(help)
+
+	return contentStyle.Render(title + searchLine + confirmLine + "\n" + a.table.View() + "\n\n" + helpLine)
 }

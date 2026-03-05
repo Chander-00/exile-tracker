@@ -48,7 +48,7 @@ func (r *Repository) SearchCharactersInAccount(params SearchCharactersInAccountP
 
 func (r *Repository) GetCharactersByAccountId(accountId string) ([]models.Character, error) {
 	query := `
-	SELECT id, account_id, character_name, died, current_league, created_at, updated_at
+	SELECT id, account_id, character_name, died, disabled, current_league, created_at, updated_at
 	FROM characters
 	WHERE account_id = ? AND deleted_at IS NULL
 	`
@@ -66,6 +66,7 @@ func (r *Repository) GetCharactersByAccountId(accountId string) ([]models.Charac
 			&char.AccountId,
 			&char.CharacterName,
 			&char.Died,
+			&char.Disabled,
 			&char.CurrentLeague,
 			&char.CreatedAt,
 			&char.UpdatedAt,
@@ -118,10 +119,105 @@ func (r *Repository) KillCharacter(characterId string) error {
 	return err
 }
 
+func (r *Repository) ToggleDisabled(characterId string) error {
+	query := `
+		UPDATE characters SET disabled = NOT disabled, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query, time.Now().UTC().Format(time.RFC3339), characterId)
+	return err
+}
+
+func (r *Repository) SoftDeleteCharacter(id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Soft delete all snapshots for this character
+	_, err := r.db.Exec(`
+		UPDATE pobsnapshots SET deleted_at = ?
+		WHERE character_id = ? AND deleted_at IS NULL
+	`, now, id)
+	if err != nil {
+		return err
+	}
+
+	// Remove from fetch queue
+	_, err = r.db.Exec(`DELETE FROM characters_to_fetch WHERE character_id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	// Soft delete the character
+	_, err = r.db.Exec(`
+		UPDATE characters SET deleted_at = ?
+		WHERE id = ?
+	`, now, id)
+	return err
+}
+
+func (r *Repository) GetDeletedCharactersByAccountId(accountId string) ([]models.Character, error) {
+	query := `
+	SELECT id, account_id, character_name, died, disabled, current_league, created_at, updated_at
+	FROM characters
+	WHERE account_id = ? AND deleted_at IS NOT NULL
+	`
+	rows, err := r.db.Query(query, accountId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var characters []models.Character
+	for rows.Next() {
+		var char models.Character
+		err := rows.Scan(
+			&char.ID,
+			&char.AccountId,
+			&char.CharacterName,
+			&char.Died,
+			&char.Disabled,
+			&char.CurrentLeague,
+			&char.CreatedAt,
+			&char.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		characters = append(characters, char)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return characters, nil
+}
+
+func (r *Repository) RestoreCharacter(id string) error {
+	// Restore the character
+	_, err := r.db.Exec(`UPDATE characters SET deleted_at = NULL WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	// Restore its snapshots
+	_, err = r.db.Exec(`UPDATE pobsnapshots SET deleted_at = NULL WHERE character_id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	// Re-add to fetch queue if not already there
+	_, err = r.db.Exec(`
+		INSERT INTO characters_to_fetch (id, character_id)
+		SELECT hex(randomblob(16)), ?
+		WHERE ? NOT IN (SELECT character_id FROM characters_to_fetch)
+	`, id, id)
+	return err
+}
+
 func (r *Repository) GetCharactersToFetch() ([]models.CharactersToFetch, error) {
 	query := `
-		SELECT id, character_id, last_fetch, should_skip
-		FROM characters_to_fetch
+		SELECT ctf.id, ctf.character_id, ctf.last_fetch, ctf.should_skip
+		FROM characters_to_fetch ctf
+		JOIN characters c ON c.id = ctf.character_id
+		WHERE c.disabled = 0 AND c.deleted_at IS NULL
 	`
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -177,7 +273,7 @@ func (r *Repository) SetShouldSkip(shouldSkip bool, id string) error {
 
 func (r *Repository) GetCharacterByID(id string) (models.Character, error) {
 	query := `
-    SELECT id, account_id, character_name, died, current_league, created_at, updated_at
+    SELECT id, account_id, character_name, died, disabled, current_league, created_at, updated_at
     FROM characters
     WHERE id = ?
     `
@@ -187,6 +283,7 @@ func (r *Repository) GetCharacterByID(id string) (models.Character, error) {
 		&c.AccountId,
 		&c.CharacterName,
 		&c.Died,
+		&c.Disabled,
 		&c.CurrentLeague,
 		&c.CreatedAt,
 		&c.UpdatedAt,
@@ -199,7 +296,7 @@ func (r *Repository) GetCharacterByID(id string) (models.Character, error) {
 
 func (r *Repository) GetAllCharacters() ([]models.Character, error) {
 	query := `
-	SELECT id, account_id, character_name, died, current_league, created_at, updated_at
+	SELECT id, account_id, character_name, died, disabled, current_league, created_at, updated_at
 	FROM characters
 	WHERE deleted_at IS NULL
 	`
@@ -217,6 +314,7 @@ func (r *Repository) GetAllCharacters() ([]models.Character, error) {
 			&char.AccountId,
 			&char.CharacterName,
 			&char.Died,
+			&char.Disabled,
 			&char.CurrentLeague,
 			&char.CreatedAt,
 			&char.UpdatedAt,

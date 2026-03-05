@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -11,7 +12,7 @@ import (
 type Config struct {
 	Port                   string
 	POEAPIBaseUrl          string
-	FetchIntervalInMinutes int64
+	FetchInterval time.Duration
 	DBPath                 string
 	POBRoot                string
 	LuajitPath             string
@@ -30,7 +31,7 @@ func initConfig() Config {
 	return Config{
 		Port:                   getEnv("PORT", ":3000"),
 		POEAPIBaseUrl:          getEnv("POE_API_BASE_URL", "https://api.example.com"),
-		FetchIntervalInMinutes: getEnvAsInt("FETCH_INTERVAL_IN_MINUTES", 30),
+		FetchInterval: time.Duration(getEnvAsInt("FETCH_INTERVAL_IN_MINUTES", 20)) * time.Minute,
 		DBPath:                 getEnv("DB_PATH", "./data.db"),
 		POBRoot:                getEnv("POB_ROOT", "/home/alexander/dev/goofing/PathOfBuilding"),
 		LuajitPath:             getEnv("LUAJIT_PATH", ""),

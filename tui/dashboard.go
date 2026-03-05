@@ -77,7 +77,7 @@ func (d *dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return d, func() tea.Msg {
 				return pushViewMsg{
-					model: newAccountsList(d.repo, d.width, d.height),
+					model: newAccountsList(d.repo, d.isAdmin, d.width, d.height),
 					title: "Accounts",
 				}
 			}
@@ -88,6 +88,13 @@ func (d *dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						model: newAddAccount(d.repo, d.width, d.height),
 						title: "Add Account",
 					}
+				}
+			}
+		case "t":
+			return d, func() tea.Msg {
+				return pushViewMsg{
+					model: newTrashAccountsList(d.repo, d.isAdmin, d.width, d.height),
+					title: "Trash",
 				}
 			}
 		case "r":
@@ -164,7 +171,7 @@ func (d *dashboard) View() string {
 	b.WriteString("\n")
 
 	// Help
-	help := "enter: accounts"
+	help := "enter: accounts | t: trash"
 	if d.isAdmin {
 		help += " | a: add account"
 	}
