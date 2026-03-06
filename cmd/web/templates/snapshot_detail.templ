@@ -1,0 +1,221 @@
+package templates
+
+import "github.com/ByChanderZap/exile-tracker/pobparser"
+import "fmt"
+import "strings"
+
+func formatStat(stats map[string]float64, key string) string {
+	val, ok := stats[key]
+	if !ok {
+		return "0"
+	}
+	if val >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", val/1_000_000)
+	}
+	if val >= 1_000 {
+		return fmt.Sprintf("%.1fk", val/1_000)
+	}
+	return fmt.Sprintf("%.0f", val)
+}
+
+func formatResist(stats map[string]float64, key string) string {
+	val, ok := stats[key]
+	if !ok {
+		return "0"
+	}
+	return fmt.Sprintf("%.0f%%", val)
+}
+
+func resistColor(stats map[string]float64, key string) string {
+	val := stats[key]
+	if val < 75 {
+		return "text-red-400"
+	}
+	return "text-green-400"
+}
+
+func chargesStr(stats map[string]float64, current string, max string) string {
+	c := stats[current]
+	m := stats[max]
+	return fmt.Sprintf("%.0f/%.0f", c, m)
+}
+
+func rarityColor(rarity string) string {
+	switch strings.ToUpper(rarity) {
+	case "UNIQUE":
+		return "text-[#AF6025]"
+	case "RARE":
+		return "text-[#FF7]"
+	case "MAGIC":
+		return "text-[#88F]"
+	default:
+		return "text-gray-300"
+	}
+}
+
+templ SnapshotDetail(summary pobparser.BuildSummary, pob *pobparser.PathOfBuilding, exportURL string, snapshotID string, createdAt string) {
+	@Layout() {
+		<!-- Header -->
+		<div class="text-center mb-6">
+			<h2 class="text-2xl font-bold text-[#AF8700]">
+				{ summary.Ascendancy } { summary.Class }
+			</h2>
+			<p class="text-gray-400">
+				Level { fmt.Sprintf("%d", summary.Level) }
+				<span class="mx-2">·</span>
+				{ createdAt }
+			</p>
+			if exportURL != "" {
+				<a href={ templ.SafeURL(exportURL) } target="_blank" class="text-sm text-blue-400 hover:text-blue-300 transition">
+					Open in PoB →
+				</a>
+			}
+		</div>
+		<!-- Main grid: 3 columns -->
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-7xl mx-auto px-4">
+			<!-- Left column: Stats -->
+			<div class="space-y-4">
+				<!-- Defences -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Defence</h3>
+					<div class="space-y-1 text-sm">
+						@statRow("Life", formatStat(summary.Stats, "Life"), "text-red-400")
+						@statRow("Life Regen", formatStat(summary.Stats, "LifeRegenRecovery")+"/s", "text-red-300")
+						@statRow("Mana", formatStat(summary.Stats, "Mana"), "text-blue-400")
+						@statRow("Mana Regen", formatStat(summary.Stats, "ManaRegenRecovery")+"/s", "text-blue-300")
+						@statRow("Energy Shield", formatStat(summary.Stats, "EnergyShield"), "text-cyan-400")
+						@statRow("Evasion", formatStat(summary.Stats, "Evasion"), "text-green-400")
+						@statRow("Armour", formatStat(summary.Stats, "Armour"), "text-yellow-400")
+						@statRow("Block", fmt.Sprintf("%.0f/%.0f", summary.Stats["EffectiveBlockChance"], summary.Stats["EffectiveSpellBlockChance"]), "text-white")
+						@statRow("Spell Suppression", formatStat(summary.Stats, "EffectiveSpellSuppressionChance")+"%", "text-purple-400")
+					</div>
+				</div>
+				<!-- Resistances -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Resistances</h3>
+					<div class="space-y-1 text-sm">
+						@statRow("Fire", formatResist(summary.Stats, "FireResist"), resistColor(summary.Stats, "FireResist"))
+						@statRow("Cold", formatResist(summary.Stats, "ColdResist"), resistColor(summary.Stats, "ColdResist"))
+						@statRow("Lightning", formatResist(summary.Stats, "LightningResist"), resistColor(summary.Stats, "LightningResist"))
+						@statRow("Chaos", formatResist(summary.Stats, "ChaosResist"), resistColor(summary.Stats, "ChaosResist"))
+					</div>
+				</div>
+				<!-- Offence -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Offence</h3>
+					<div class="space-y-1 text-sm">
+						@statRow("Combined DPS", formatStat(summary.Stats, "CombinedDPS"), "text-[#AF8700]")
+						@statRow("Total DPS", formatStat(summary.Stats, "TotalDPS"), "text-white")
+						@statRow("Hit Chance", formatStat(summary.Stats, "HitChance")+"%", "text-white")
+						@statRow("Crit Chance", fmt.Sprintf("%.1f%%", summary.Stats["CritChance"]), "text-white")
+						@statRow("Crit Multi", fmt.Sprintf("%.0f%%", summary.Stats["CritMultiplier"]*100), "text-white")
+						@statRow("Speed", fmt.Sprintf("%.2f/s", summary.Stats["Speed"]), "text-white")
+						@statRow("Effective HP", formatStat(summary.Stats, "TotalEHP"), "text-white")
+					</div>
+				</div>
+				<!-- Charges -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Charges</h3>
+					<div class="space-y-1 text-sm">
+						@statRow("Power", chargesStr(summary.Stats, "PowerCharges", "PowerChargesMax"), "text-blue-400")
+						@statRow("Frenzy", chargesStr(summary.Stats, "FrenzyCharges", "FrenzyChargesMax"), "text-green-400")
+						@statRow("Endurance", chargesStr(summary.Stats, "EnduranceCharges", "EnduranceChargesMax"), "text-red-400")
+					</div>
+				</div>
+			</div>
+			<!-- Middle column: Items + Skills -->
+			<div class="space-y-4">
+				<!-- Equipment -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Equipment</h3>
+					<div class="space-y-2 text-sm">
+						for _, item := range summary.Items {
+							<div class="flex justify-between items-start py-1 border-b border-gray-800 last:border-0">
+								<span class="text-gray-500 text-xs w-20 shrink-0">{ item.Slot }</span>
+								<div class="text-right">
+									<span class={ rarityColor(item.Rarity) }>{ item.Name }</span>
+									if item.BaseName != "" && item.BaseName != item.Name {
+										<br/>
+										<span class="text-gray-500 text-xs">{ item.BaseName }</span>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</div>
+				<!-- Skills -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Skills</h3>
+					<div class="space-y-3 text-sm">
+						for _, sg := range summary.SkillGroups {
+							<div class="py-1 border-b border-gray-800 last:border-0">
+								<span class="text-gray-500 text-xs">{ sg.Slot }</span>
+								<div class="flex flex-wrap gap-1 mt-1">
+									for i, gem := range sg.Gems {
+										if i == 0 {
+											<span class="text-[#AF8700] font-medium">{ gem }</span>
+										} else {
+											<span class="text-gray-400">+ { gem }</span>
+										}
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</div>
+			</div>
+			<!-- Right column: Tree info + Misc -->
+			<div class="space-y-4">
+				<!-- Passive Tree -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Passive Tree</h3>
+					<p class="text-gray-400 text-sm mb-3">
+						{ fmt.Sprintf("%d nodes allocated", summary.NodeCount) }
+					</p>
+					if summary.TreeURL != "" {
+						<div class="text-center mb-4">
+							<a
+								href={ templ.SafeURL(summary.TreeURL) }
+								target="_blank"
+								class="inline-block px-4 py-2 bg-[#AF8700] text-black font-bold rounded hover:bg-[#D4A017] transition text-sm"
+							>
+								View Passive Tree →
+							</a>
+						</div>
+					}
+					<!-- Attributes -->
+					<div class="space-y-1 text-sm">
+						<h4 class="text-gray-400 font-medium mb-1">Attributes</h4>
+						@statRow("Strength", fmt.Sprintf("%.0f", summary.Stats["Str"]), "text-red-400")
+						@statRow("Dexterity", fmt.Sprintf("%.0f", summary.Stats["Dex"]), "text-green-400")
+						@statRow("Intelligence", fmt.Sprintf("%.0f", summary.Stats["Int"]), "text-blue-400")
+					</div>
+					<!-- Max Hit Taken -->
+					<div class="mt-4 space-y-1 text-sm">
+						<h4 class="text-gray-400 font-medium mb-1">Max Hit Taken</h4>
+						@statRow("Physical", formatStat(summary.Stats, "PhysicalMaximumHitTaken"), "text-gray-300")
+						@statRow("Fire", formatStat(summary.Stats, "FireMaximumHitTaken"), "text-red-400")
+						@statRow("Cold", formatStat(summary.Stats, "ColdMaximumHitTaken"), "text-blue-300")
+						@statRow("Lightning", formatStat(summary.Stats, "LightningMaximumHitTaken"), "text-yellow-300")
+						@statRow("Chaos", formatStat(summary.Stats, "ChaosMaximumHitTaken"), "text-purple-400")
+					</div>
+				</div>
+				<!-- Misc -->
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">Misc</h3>
+					<div class="space-y-1 text-sm">
+						@statRow("Movement Speed", fmt.Sprintf("%.0f%%", (summary.Stats["EffectiveMovementSpeedMod"]-1)*100), "text-white")
+						@statRow("Phys Reduction", fmt.Sprintf("%.0f%%", summary.Stats["PhysicalDamageReduction"]), "text-white")
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ statRow(label string, value string, valueClass string) {
+	<div class="flex justify-between py-0.5">
+		<span class="text-gray-400">{ label }</span>
+		<span class={ valueClass }>{ value }</span>
+	</div>
+}
