@@ -97,6 +97,15 @@ func (d *dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					title: "Trash",
 				}
 			}
+		case "L":
+			if d.isAdmin {
+				return d, func() tea.Msg {
+					return pushViewMsg{
+						model: newLeagueReset(d.repo, d.width, d.height),
+						title: "League Reset",
+					}
+				}
+			}
 		case "r":
 			d.loading = true
 			d.err = nil
@@ -173,7 +182,7 @@ func (d *dashboard) View() string {
 	// Help
 	help := "enter: accounts | t: trash"
 	if d.isAdmin {
-		help += " | a: add account"
+		help += " | a: add account | L: league reset"
 	}
 	help += " | r: refresh | q: quit"
 	b.WriteString(helpStyle.Render(help))

@@ -348,6 +348,26 @@ type UpdateCharacterParams struct {
 	UpdatedAt     string
 }
 
+func (r *Repository) LeagueReset() error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM characters_to_fetch`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM pobsnapshots`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM characters`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (r *Repository) UpdateCharacter(arg UpdateCharacterParams) error {
 	_, err := r.db.Exec(updateCharacter,
 		arg.CharacterName,
