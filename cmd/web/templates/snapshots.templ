@@ -8,7 +8,7 @@ templ SnapshotsPage(swe []models.SnapshotWithExtras, stringValue func(*string) s
 	@Layout() {
 		<div class="flex flex-col items-center">
 			if len(swe) > 0 {
-				<h2>
+				<h2 class="text-xl font-bold text-[#AF8700]">
 					{ fmt.Sprintf("%s Snapshots by %s", swe[0].CharacterName, swe[0].AccountName) }
 				</h2>
 			}
@@ -17,25 +17,46 @@ templ SnapshotsPage(swe []models.SnapshotWithExtras, stringValue func(*string) s
 			<div id="characters-table" class="w-full max-w-4xl mx-auto border border-gray-600 rounded-lg overflow-hidden backdrop-blur-sm">
 				<div class="flex font-bold bg-gray-400 bg-opacity-15">
 					<div class="flex-1 px-4 py-3 border-r border-gray-600">
-						ID
+						#
 					</div>
 					<div class="flex-1 px-4 py-3 border-r border-gray-600">
-						PoB
+						PoB Link
 					</div>
-					<div class="text-white flex-1 px-4 py-3 border-r border-gray-600">
-						Fetched time
+					<div class="flex-1 px-4 py-3 border-r border-gray-600">
+						Fetched
+					</div>
+					<div class="w-24 px-4 py-3">
+						View
 					</div>
 				</div>
-				for _, data := range swe {
+				for i, data := range swe {
 					<div class="flex hover:bg-gray-700/50 transition-colors border-b border-gray-600 last:border-b-0">
-						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white break-all">
-							{ data.SnapshotData.ID }
+						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-gray-400">
+							{ fmt.Sprintf("%d", len(swe)-i) }
+						</div>
+						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white truncate">
+							if data.SnapshotData.ExportString != "" {
+								<a href={ templ.SafeURL(data.SnapshotData.ExportString) } target="_blank" class="text-blue-400 hover:text-blue-300">
+									{ data.SnapshotData.ExportString }
+								</a>
+							} else {
+								<span class="text-gray-500">-</span>
+							}
 						</div>
 						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
-							{ data.SnapshotData.ExportString }
+							{ time.Since(data.SnapshotData.CreatedAt).Truncate(time.Second).String() } ago
 						</div>
-						<div class="flex-1 px-4 py-3 border-r border-gray-600 text-white">
-							{ time.Since(data.SnapshotData.CreatedAt).Truncate(time.Second).String() }
+						<div class="w-24 px-4 py-3">
+							if data.SnapshotData.PobCode != "" {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/snapshots/%s/detail/%s", data.SnapshotData.CharacterId, data.SnapshotData.ID)) }
+									class="text-[#AF8700] hover:text-[#D4A017] font-medium transition"
+								>
+									Details
+								</a>
+							} else {
+								<span class="text-gray-600 text-sm">N/A</span>
+							}
 						</div>
 					</div>
 				}

@@ -35,6 +35,7 @@ type POBSnapshot struct {
 	ID           string `json:"id"`
 	CharacterId  string `json:"character_id"`
 	ExportString string `json:"export_string"`
+	PobCode      string `json:"pob_code"`
 
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`

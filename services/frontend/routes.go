@@ -9,6 +9,7 @@ import (
 	"github.com/ByChanderZap/exile-tracker/cmd/web/static"
 	"github.com/ByChanderZap/exile-tracker/cmd/web/templates"
 	"github.com/ByChanderZap/exile-tracker/models"
+	"github.com/ByChanderZap/exile-tracker/pobparser"
 	"github.com/ByChanderZap/exile-tracker/repository"
 	"github.com/ByChanderZap/exile-tracker/utils"
 	"github.com/go-chi/chi/v5"
@@ -37,6 +38,7 @@ func (h *Handler) RegisterRoutes(router *chi.Mux) {
 	router.Get("/accounts/{accountId}/characters", h.handleCharactersByAccount)
 	router.Get("/accounts/{accountId}/characters/search", h.handleCharactersSearchByAccount)
 	router.Get("/snapshots/{characterId}", h.handleLoadedSnapshotsByCharacter)
+	router.Get("/snapshots/{characterId}/detail/{snapshotId}", h.handleSnapshotDetail)
 }
 
 func (h *Handler) handleHomePage(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +112,38 @@ func (h *Handler) handleCharactersSearchByAccount(w http.ResponseWriter, r *http
 	}
 
 	templates.CharactersTable(characters, utils.StringValue).Render(r.Context(), w)
+}
+
+func (h *Handler) handleSnapshotDetail(w http.ResponseWriter, r *http.Request) {
+	snapshotId := chi.URLParam(r, "snapshotId")
+
+	snap, err := h.repository.GetSnapshotByID(snapshotId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Snapshot not found", http.StatusNotFound)
+			return
+		}
+		h.log.Error().Err(err).Msg("Failed to get snapshot")
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	if snap.PobCode == "" {
+		http.Error(w, "This snapshot has no PoB data to display", http.StatusNotFound)
+		return
+	}
+
+	pob, err := pobparser.Decode(snap.PobCode)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to decode PoB data")
+		http.Error(w, "Failed to decode build data", http.StatusInternalServerError)
+		return
+	}
+
+	summary := pob.Summarize()
+	createdAt := snap.CreatedAt.Format("Jan 2, 2006 15:04")
+
+	templates.SnapshotDetail(summary, pob, snap.ExportString, snap.ID, createdAt).Render(r.Context(), w)
 }
 
 func (h *Handler) handleLoadedSnapshotsByCharacter(w http.ResponseWriter, r *http.Request) {

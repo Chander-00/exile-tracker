@@ -166,7 +166,7 @@ func (d *dashboard) View() string {
 				league = *rc.CurrentLeague
 			}
 
-			line := fmt.Sprintf("%s%-20s %-15s %-10s %s",
+			line := fmt.Sprintf("%s%-18.18s %-16.16s %-10.10s %s",
 				cursor,
 				rc.CharacterName,
 				rc.AccountName,
