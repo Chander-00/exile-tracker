@@ -1,4 +1,4 @@
-.PHONY: build run test clean deps help docker-build docker-up docker-down docker-logs
+.PHONY: build run test clean deps help docker-build docker-up docker-down docker-logs shrink-tree
 
 # Binary name
 BINARY_NAME=exile-tracker
@@ -80,6 +80,9 @@ docker-logs: ## Show logs from all services
 lint: ## Run linter
 	@echo "Running linter..."
 	golangci-lint run
+
+shrink-tree: ## Shrink data.json into static/tree.json for the passive tree renderer
+	go run cmd/tools/shrinktree/main.go data.json cmd/web/static/tree.json
 
 fmt: ## Format code
 	@echo "Formatting code..."

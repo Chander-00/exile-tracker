@@ -85,14 +85,15 @@ type Spec struct {
 
 // Parsed high-level build summary for display.
 type BuildSummary struct {
-	Class       string
-	Ascendancy  string
-	Level       int
-	Stats       map[string]float64
-	Items       []ParsedItem
-	SkillGroups []SkillGroup
-	TreeURL     string
-	NodeCount   int
+	Class          string
+	Ascendancy     string
+	Level          int
+	Stats          map[string]float64
+	Items          []ParsedItem
+	SkillGroups    []SkillGroup
+	TreeURL        string
+	NodeCount      int
+	AllocatedNodes []int
 }
 
 type ParsedItem struct {
@@ -177,7 +178,14 @@ func (pob *PathOfBuilding) Summarize() BuildSummary {
 		spec := pob.Tree.Specs[0]
 		summary.TreeURL = strings.TrimSpace(spec.URL)
 		if spec.Nodes != "" {
-			summary.NodeCount = len(strings.Split(spec.Nodes, ","))
+			parts := strings.Split(spec.Nodes, ",")
+			summary.NodeCount = len(parts)
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if id, err := strconv.Atoi(p); err == nil {
+					summary.AllocatedNodes = append(summary.AllocatedNodes, id)
+				}
+			}
 		}
 	}
 
