@@ -62,3 +62,6 @@ logs.json
 # Nginx TLS certificates (Cloudflare origin certs — secrets)
 nginx/certs/*.pem
 nginx/certs/*.key
+
+# GGG full tree data (use `make shrink-tree` to process)
+data.json
