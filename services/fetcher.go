@@ -180,7 +180,7 @@ func (fs *FetcherService) CreateSnapshot(ctx context.Context, characterId string
 		return fmt.Errorf("failed to encode json passives: %w", err)
 	}
 
-	result, err := fs.generatePoBBin(ctx, itemsPath, passivesPath)
+	buildCode, err := fs.generatePoBBin(ctx, itemsPath, passivesPath)
 	if err != nil {
 		return fmt.Errorf("failed to execute PoB: %w", err)
 	}
@@ -193,14 +193,15 @@ func (fs *FetcherService) CreateSnapshot(ctx context.Context, characterId string
 		fs.log.Warn().Msg("No previous snapshots found.")
 	}
 
-	if result == dbSnapshot.ExportString {
+	if buildCode.RawCode == dbSnapshot.PobCode {
 		fs.log.Info().Msg("No changes detected between latest and current snapshot")
 		return nil
 	}
 
 	err = fs.repo.CreatePOBSnapshot(repository.CreatePoBSnapshotParams{
 		CharacterId:  characterId,
-		ExportString: result,
+		ExportString: buildCode.URL,
+		PobCode:      buildCode.RawCode,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to store snapshot: %w", err)
@@ -209,7 +210,12 @@ func (fs *FetcherService) CreateSnapshot(ctx context.Context, characterId string
 	return nil
 }
 
-func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, passivesPath string) (string, error) {
+type BuildResult struct {
+	RawCode string
+	URL     string
+}
+
+func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, passivesPath string) (BuildResult, error) {
 	fs.log.Info().Msg("Executing Path of Building in headless mode")
 	pobRoot := config.Envs.POBRoot
 
@@ -222,7 +228,7 @@ func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, 
 		var err error
 		luajitPath, err = exec.LookPath("luajit")
 		if err != nil {
-			return "", fmt.Errorf("luajit not found in PATH (set LUAJIT_PATH to specify it manually): %w", err)
+			return BuildResult{}, fmt.Errorf("luajit not found in PATH (set LUAJIT_PATH to specify it manually): %w", err)
 		}
 	}
 
@@ -243,24 +249,24 @@ func (fs *FetcherService) generatePoBBin(ctx context.Context, itemsPath string, 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			fs.log.Error().Str("stderr", stderr.String()).Msg("PoB execution timed out after 30s")
-			return "", fmt.Errorf("PoB execution timed out after 30s: %w", err)
+			return BuildResult{}, fmt.Errorf("PoB execution timed out after 30s: %w", err)
 		}
-		return "", fmt.Errorf("PoB execution failed: %w\nstderr: %s", err, stderr.String())
+		return BuildResult{}, fmt.Errorf("PoB execution failed: %w\nstderr: %s", err, stderr.String())
 	}
 
 	output := strings.TrimSpace(stdout.String())
 	if output == "" {
-		return "", fmt.Errorf("PoB produced empty output")
+		return BuildResult{}, fmt.Errorf("PoB produced empty output")
 	}
 
 	// Take the last non-empty line as the build code
 	lines := strings.Split(output, "\n")
-	buildCode := strings.TrimSpace(lines[len(lines)-1])
+	rawCode := strings.TrimSpace(lines[len(lines)-1])
 
-	uploadedBuild, err := buildsSitesClient.UploadBuildWithFallback(buildCode)
+	uploadedBuild, err := buildsSitesClient.UploadBuildWithFallback(rawCode)
 	if err != nil {
-		return "", fmt.Errorf("failed when uploading build: %w", err)
+		return BuildResult{}, fmt.Errorf("failed when uploading build: %w", err)
 	}
 	fs.log.Debug().Msg(uploadedBuild)
-	return uploadedBuild, nil
+	return BuildResult{RawCode: rawCode, URL: uploadedBuild}, nil
 }

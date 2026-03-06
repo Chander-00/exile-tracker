@@ -8,13 +8,14 @@ import (
 )
 
 const createPobSnapshot = `
-INSERT INTO pobsnapshots (id, character_id, export_string, created_at, updated_at)
-	VALUES(?, ?, ?, ?, ?)
+INSERT INTO pobsnapshots (id, character_id, export_string, pob_code, created_at, updated_at)
+	VALUES(?, ?, ?, ?, ?, ?)
 `
 
 type CreatePoBSnapshotParams struct {
 	CharacterId  string
 	ExportString string
+	PobCode      string
 }
 
 func (r *Repository) CreatePOBSnapshot(params CreatePoBSnapshotParams) error {
@@ -25,6 +26,7 @@ func (r *Repository) CreatePOBSnapshot(params CreatePoBSnapshotParams) error {
 		idString,
 		params.CharacterId,
 		params.ExportString,
+		params.PobCode,
 		now,
 		now,
 	)
@@ -32,7 +34,7 @@ func (r *Repository) CreatePOBSnapshot(params CreatePoBSnapshotParams) error {
 }
 
 const getSnapshotsByCharacterWithExtras = `
-	SELECT p.id, p.export_string, c.character_name, a.account_name, p.created_at  
+	SELECT p.id, p.character_id, p.export_string, p.pob_code, c.character_name, a.account_name, p.created_at
 	FROM pobsnapshots p
 	INNER JOIN characters c on c.id = p.character_id
 	INNER JOIN accounts a on a.id = c.account_id
@@ -57,7 +59,9 @@ func (r *Repository) GetSnapshotsByCharacterWithExtras(params GetSnapshotsByChar
 		var s models.SnapshotWithExtras
 		err := rows.Scan(
 			&s.SnapshotData.ID,
+			&s.SnapshotData.CharacterId,
 			&s.SnapshotData.ExportString,
+			&s.SnapshotData.PobCode,
 			&s.CharacterName,
 			&s.AccountName,
 			&s.SnapshotData.CreatedAt,
@@ -76,7 +80,7 @@ func (r *Repository) GetSnapshotsByCharacterWithExtras(params GetSnapshotsByChar
 
 func (r *Repository) GetSnapshotsByCharacter(characterId string) ([]models.POBSnapshot, error) {
 	query := `
-	SELECT id, character_id, export_string, created_at, updated_at, deleted_at
+	SELECT id, character_id, export_string, pob_code, created_at, updated_at, deleted_at
 	FROM pobsnapshots
 	WHERE character_id = ?
 	ORDER BY created_at DESC
@@ -94,6 +98,7 @@ func (r *Repository) GetSnapshotsByCharacter(characterId string) ([]models.POBSn
 			&s.ID,
 			&s.CharacterId,
 			&s.ExportString,
+			&s.PobCode,
 			&s.CreatedAt,
 			&s.UpdatedAt,
 			&s.DeletedAt,
@@ -111,8 +116,8 @@ func (r *Repository) GetSnapshotsByCharacter(characterId string) ([]models.POBSn
 
 func (r *Repository) GetLatestSnapshotByCharacter(characterId string) (models.POBSnapshot, error) {
 	query := `
-	SELECT id, character_id, export_string, created_at, updated_at, deleted_at
-	FROM pobsnapshots 
+	SELECT id, character_id, export_string, pob_code, created_at, updated_at, deleted_at
+	FROM pobsnapshots
 	WHERE character_id = ?
 	ORDER BY created_at DESC
 	LIMIT 1
@@ -122,6 +127,7 @@ func (r *Repository) GetLatestSnapshotByCharacter(characterId string) (models.PO
 		&s.ID,
 		&s.CharacterId,
 		&s.ExportString,
+		&s.PobCode,
 		&s.CreatedAt,
 		&s.UpdatedAt,
 		&s.DeletedAt,
@@ -134,7 +140,7 @@ func (r *Repository) GetLatestSnapshotByCharacter(characterId string) (models.PO
 
 func (r *Repository) GetSnapshotByID(id string) (models.POBSnapshot, error) {
 	query := `
-	SELECT id, character_id, export_string, created_at, updated_at, deleted_at
+	SELECT id, character_id, export_string, pob_code, created_at, updated_at, deleted_at
 	FROM pobsnapshots
 	WHERE id = ?
 	`
@@ -143,6 +149,7 @@ func (r *Repository) GetSnapshotByID(id string) (models.POBSnapshot, error) {
 		&s.ID,
 		&s.CharacterId,
 		&s.ExportString,
+		&s.PobCode,
 		&s.CreatedAt,
 		&s.UpdatedAt,
 		&s.DeletedAt,
