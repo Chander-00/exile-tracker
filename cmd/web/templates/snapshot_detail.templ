@@ -3,6 +3,7 @@ package templates
 import "github.com/ByChanderZap/exile-tracker/pobparser"
 import "fmt"
 import "strings"
+import "encoding/json"
 
 func formatStat(stats map[string]float64, key string) string {
 	val, ok := stats[key]
@@ -38,6 +39,11 @@ func chargesStr(stats map[string]float64, current string, max string) string {
 	c := stats[current]
 	m := stats[max]
 	return fmt.Sprintf("%.0f/%.0f", c, m)
+}
+
+func allocatedNodesJSON(nodes []int) string {
+	b, _ := json.Marshal(nodes)
+	return string(b)
 }
 
 func rarityColor(rarity string) string {
@@ -210,6 +216,28 @@ templ SnapshotDetail(summary pobparser.BuildSummary, pob *pobparser.PathOfBuildi
 				</div>
 			</div>
 		</div>
+		if len(summary.AllocatedNodes) > 0 {
+			<div class="mt-6 max-w-7xl mx-auto px-4">
+				<div class="border border-gray-700 rounded-lg p-4 backdrop-blur-sm bg-gray-900/30">
+					<h3 class="text-[#AF8700] font-bold mb-3 border-b border-gray-700 pb-2">
+						Passive Tree
+						<span class="text-gray-500 font-normal text-sm ml-2">
+							{ fmt.Sprintf("%d nodes allocated", len(summary.AllocatedNodes)) }
+						</span>
+					</h3>
+					<div id="passive-tree-container" style="width:100%;height:600px;overflow:hidden;"
+						 data-nodes={ allocatedNodesJSON(summary.AllocatedNodes) }></div>
+				</div>
+			</div>
+			<script src="/static/tree.js"></script>
+			<script>
+				(function() {
+					var el = document.getElementById('passive-tree-container');
+					var nodes = JSON.parse(el.getAttribute('data-nodes'));
+					renderPassiveTree('passive-tree-container', nodes);
+				})();
+			</script>
+		}
 	}
 }
 
