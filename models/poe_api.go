@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type POECharacterResponse struct {
 	Name     string `json:"name"`
 	Realm    string `json:"realm"`
@@ -16,10 +18,10 @@ type PassiveSkillsResponse struct {
 	AlternateAscendancy int                    `json:"alternate_ascendancy"`
 	Hashes              []int                  `json:"hashes"`
 	HashesEx            []int                  `json:"hashes_ex"`
-	MasteryEffects      map[string]int         `json:"mastery_effects"`
-	SkillOverrides      map[string]interface{} `json:"skill_overrides"`
+	MasteryEffects      json.RawMessage        `json:"mastery_effects"`
+	SkillOverrides      json.RawMessage        `json:"skill_overrides"`
 	Items               []PassiveItem          `json:"items"`
-	JewelData           map[string]JewelData   `json:"jewel_data"`
+	JewelData           json.RawMessage        `json:"jewel_data"`
 }
 
 // PassiveItem represents an item in the passive skills response
