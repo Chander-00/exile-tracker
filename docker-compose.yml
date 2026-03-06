@@ -7,7 +7,7 @@ services:
       - ssh-keys:/app/.ssh
     ports:
       - "3000:3000"
-      - "2222:2222"
+      - "22:2222"
     networks:
       - web
       - default

@@ -65,3 +65,6 @@ nginx/certs/*.key
 
 # GGG full tree data (use `make shrink-tree` to process)
 data.json
+
+# Local docker compose overrides
+docker-compose.override.yml
